@@ -129,7 +129,7 @@ gifsicle -O3 --careful assets/start.gif -o assets/start.gif
 | ------------------- | ----------------------------------------------------- |
 | `npm run dev`       | Executa em modo desenvolvimento com recarga (tsx)     |
 | `npm run build`     | Compila o TypeScript para `dist/`                     |
-| `npm start`         | Executa o build compilado                             |
+| `npm start`         | Compila automaticamente e executa o build             |
 | `npm run typecheck` | Verifica os tipos sem gerar arquivos                  |
 | `npm test`          | Executa os testes automatizados                       |
 
@@ -147,6 +147,17 @@ segredos nas mensagens de erro.
 
 ## Solução para problemas comuns
 
+- **`Error: Cannot find module '.../dist/index.js'`** — o `dist/` é artefato de
+  build e não vai para o Git, então um clone novo não o possui. O `npm start`
+  já compila automaticamente, mas se o erro aparecer, rode:
+
+  ```bash
+  npm run build
+  npm start
+  ```
+
+  Confirme também que o `npm install` foi executado e que você está na pasta do
+  projeto (onde ficam o `package.json` e o `src/`).
 - **"TELEGRAM_BOT_TOKEN não foi configurado."** — crie o `.env` a partir do
   `.env.example` e informe o token.
 - **`401 Unauthorized`** — o token está incorreto ou expirado. Gere um novo com
