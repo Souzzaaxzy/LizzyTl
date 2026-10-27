@@ -66,5 +66,7 @@ Implementado: configuração validada, logger, comando `/start` com GIF + legend
 + botões em uma única mensagem, menu de quatro botões em duas colunas e
 tratamento de callbacks.
 
-Pendente e dependente do proprietário: arquivo `assets/start.gif`, token real e
-definição do fork da Baileys.
+- `assets/start.gif` já está no repositório (540x300, 10 fps).
+- O token real fica apenas no `.env` local, que não é versionado.
+
+Pendente e dependente do proprietário: definição do fork da Baileys.

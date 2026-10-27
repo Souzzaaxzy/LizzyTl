@@ -108,12 +108,20 @@ LOG_LEVEL=info
 
 ## Localização do GIF
 
-Coloque o arquivo em `assets/start.gif`. O caminho é configurável por
-`START_GIF_PATH`, então o GIF pode ser trocado sem alterar a lógica do `/start`.
+O GIF do menu já está em `assets/start.gif` (540x300, 10 fps, ~2,6 MB), gerado a
+partir do vídeo MP4 fornecido. O caminho é configurável por `START_GIF_PATH`,
+então o GIF pode ser trocado sem alterar a lógica do `/start`.
 
 Se o arquivo não existir, o bot **não encerra e não gera erro sem explicação**:
 ele registra um aviso no log e envia a legenda com os botões, sem o GIF. Ao
 adicionar o arquivo, o envio volta automaticamente ao formato normal.
+
+Para regerar o GIF a partir de outro vídeo (requer `ffmpeg` e `gifsicle`):
+
+```bash
+ffmpeg -i origem.mp4 -vf "fps=10,scale=540:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" -loop 0 assets/start.gif
+gifsicle -O3 --careful assets/start.gif -o assets/start.gif
+```
 
 ## Comandos para iniciar e compilar
 

@@ -66,8 +66,11 @@ async function main(): Promise<void> {
   });
 
   try {
-    await bot.launch();
-    logger.info('Bot do Telegram em execução.');
+    // O callback onLaunch é disparado quando o getMe inicial conclui com
+    // sucesso; launch() só resolve quando o polling é encerrado.
+    await bot.launch({}, () => {
+      logger.info('Bot do Telegram em execução.');
+    });
   } catch (error) {
     logger.error(
       'Não foi possível iniciar o bot. Verifique o token em .env e a conexão com a internet.',
