@@ -1,0 +1,28 @@
+# Dependências e build
+node_modules/
+dist/
+
+# Ambiente e segredos
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Credenciais e sessões autenticadas do WhatsApp
+data/*
+!data/.gitkeep
+auth_info*/
+*.session
+session/
+creds.json
+
+# Arquivos temporários e dados locais privados
+*.tmp
+*.temp
+.DS_Store
+tmp/
+.cache/
