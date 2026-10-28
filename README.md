@@ -367,20 +367,18 @@ Hoje existem apenas `Padrão` e `Dono`. Novos planos serão adicionados depois.
 
 ## Solução para problemas comuns
 
-- **`EALLOWGIT` ou `EALLOWREMOTE`: "Fetching packages of type ... have been
-  disabled"** — o npm 11.20+ bloqueia dependências que não vêm do registro
-  oficial: `git`, `remote`, `file` e `directory`. Como o fork da Baileys **não
-  está publicado no npm**, ele cai numa dessas categorias e o npm recusa.
+- **`EALLOWGIT` / `EALLOWREMOTE`: "Fetching packages of type ... have been
+  disabled"** — o npm 12 passou a **bloquear por padrão** dependências que não
+  vêm do registro oficial (`git` e `remote`). Como o fork da Baileys não está
+  publicado no npm, uma referência a `github:` ou a um tarball remoto é
+  recusada.
 
-  Use **`npm run setup`** em vez de `npm install` — esse script já passa as
-  permissões necessárias. É o único motivo pelo qual ele existe.
+  Este projeto **não precisa de flag nem de `.npmrc`**: o tarball do fork fica
+  versionado em `vendor/baileys.tgz`, e a dependência aponta para
+  `file:vendor/baileys.tgz`. O npm permite `file:`, então o `npm install` puro
+  funciona — inclusive em painel que roda `npm i` sozinho.
 
-  ```bash
-  npm run setup
-  npm start
-  ```
-
-  O equivalente direto é `npm install --allow-remote=all --allow-git=all`.
+  Se você vir esse erro, seu `package.json` está antigo: rode `git pull`.
 
 - **Dezenas de erros `TS2xxx` / `Cannot find name 'process'` no build** — sintoma
   de `npm install` que não completou. Sem `node_modules` falta o `@types/node`,

@@ -79,25 +79,28 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - O código de pareamento vai para o chat de quem pediu, via
   `onPairingCode(userId, code)`. Nunca para outro usuário.
 
-## Instalação: `npm run setup`, nunca `npm install`
+## Instalação: fork vendorizado em `vendor/baileys.tgz`
 
-O npm 11.20+ bloqueia quatro categorias de dependência que não vêm do registro
-oficial: `git`, `remote`, `file` e `directory` (erros `EALLOWGIT`,
-`EALLOWREMOTE`, etc.). Como o fork **não está publicado no npm**, ele cai
-inevitavelmente em uma delas.
+O **npm 12 bloqueia por padrão** dependências fora do registro oficial:
+`allow-git = none` e `allow-remote = none` (erros `EALLOWGIT`, `EALLOWREMOTE`).
+`allow-file` e `allow-directory` continuam `all`.
 
-Por isso existe o script `setup` no `package.json`:
+Como o fork da Baileys não está publicado no npm, qualquer referência
+`github:` ou a tarball remoto falha. A solução é **vendorizar**:
 
 ```
-npm run setup   # = npm install --allow-remote=all --allow-git=all
+vendor/baileys.tgz                        # tarball do commit, versionado (4.5 MB)
+"@souzzaaxzy/baileys": "file:vendor/baileys.tgz"
 ```
 
-A flag fica no `package.json` (versionado, visível na revisão) em vez de num
-`.npmrc`, que seria um arquivo de configuração do npm — mudança que exige
-consentimento explícito, por mexer em política de instalação da máquina.
+Isso funciona com `npm install` puro, sem flag e sem `.npmrc` — essencial para
+hospedagem que roda `npm i` automaticamente (painel Pterodactyl, CI, etc.).
 
-**Documente `npm run setup` como o comando oficial de instalação.** Se alguém
-rodar `npm install` puro num npm novo, vai falhar.
+Para atualizar o fork: baixe o tarball do novo commit, substitua o arquivo e
+ajuste nada no `package.json` (o caminho continua o mesmo).
+
+Não use `.npmrc` com `allow-*`: é configuração do npm na máquina, e alterar
+política de instalação exige consentimento explícito do proprietário.
 
 O npm 11.20+ **bloqueia dependências do tipo git** por padrão
 (`allow-git = "none"`), com o erro `EALLOWGIT`. Além disso, uma referência

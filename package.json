@@ -14,11 +14,10 @@
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --import tsx \"tests/*.test.ts\"",
-    "setup": "npm install --allow-remote=all --allow-git=all"
+    "test": "node --test --import tsx \"tests/*.test.ts\""
   },
   "dependencies": {
-    "@souzzaaxzy/baileys": "https://github.com/Souzzaaxzy/baileys/archive/a9c3e8207f744945250c1926c144d4f1af7d3a27.tar.gz",
+    "@souzzaaxzy/baileys": "file:vendor/baileys.tgz",
     "dotenv": "^16.4.5",
     "telegraf": "^4.16.3"
   },
