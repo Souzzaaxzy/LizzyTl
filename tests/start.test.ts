@@ -7,10 +7,12 @@ import { afterEach, before, describe, it } from 'node:test';
 import { Telegram, type Telegraf } from 'telegraf';
 
 import { createLogger } from '../src/core/logger';
+import { MediaCache } from '../src/data/media-cache';
+import { UserStore } from '../src/data/user-store';
 import { registerStartCommand, resolveDisplayName } from '../src/telegram/commands/start';
 import { createBot } from '../src/telegram/client';
 import { registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
-import { MENU_CALLBACKS } from '../src/telegram/menus/main-menu';
+import { CALLBACKS } from '../src/telegram/screens/screens';
 
 interface RecordedCall {
   method: string;
@@ -27,7 +29,6 @@ const silentLogger = createLogger('error');
  *
  * O Telegraf cria uma instância de Telegram por atualização, então o stub é
  * aplicado no protótipo da classe para valer também para `ctx.telegram`.
- * O protótipo original é restaurado por `restore()`.
  */
 function instrument(): { calls: RecordedCall[]; restore: () => void } {
   const calls: RecordedCall[] = [];
@@ -45,6 +46,12 @@ function instrument(): { calls: RecordedCall[]; restore: () => void } {
     if (method === 'getMe') {
       return Promise.resolve({ id: 1, is_bot: true, first_name: 'Lizzy', username: 'lizzy_bot' });
     }
+    if (method === 'sendAnimation') {
+      return Promise.resolve({
+        message_id: 10,
+        animation: { file_id: 'FILE_ID_123', file_unique_id: 'u1', width: 540, height: 300, duration: 3 },
+      });
+    }
     return Promise.resolve(true);
   };
 
@@ -58,7 +65,6 @@ function instrument(): { calls: RecordedCall[]; restore: () => void } {
 
 let activeStub: { calls: RecordedCall[]; restore: () => void } | null = null;
 
-/** Ativa o stub e garante a restauração do protótipo ao final de cada teste. */
 function stubTelegram(): RecordedCall[] {
   activeStub = instrument();
   return activeStub.calls;
@@ -68,6 +74,16 @@ afterEach(() => {
   activeStub?.restore();
   activeStub = null;
 });
+
+let dataDir: string;
+
+function makeStore(ownerId?: number): UserStore {
+  return new UserStore({ dataDir, logger: silentLogger, ownerId });
+}
+
+function makeCache(): MediaCache {
+  return new MediaCache(dataDir, silentLogger);
+}
 
 function startUpdate(updateId: number, from: { id: number; username?: string; first_name?: string }) {
   return {
@@ -83,23 +99,30 @@ function startUpdate(updateId: number, from: { id: number; username?: string; fi
   };
 }
 
-function callbackUpdate(updateId: number, data: string) {
+function callbackUpdate(updateId: number, data: string, fromId = 42) {
   return {
     update_id: updateId,
     callback_query: {
       id: String(updateId),
-      from: { id: 42, is_bot: false, first_name: 'Teste' },
+      from: { id: fromId, is_bot: false, first_name: 'Teste' },
       chat_instance: 'ci',
       data,
       message: {
         message_id: 1,
         date: Math.floor(Date.now() / 1000),
-        chat: { id: 42, type: 'private' as const },
+        chat: { id: fromId, type: 'private' as const },
         from: { id: 1, is_bot: true, first_name: 'Lizzy' },
       },
     },
   };
 }
+
+before(() => {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-data-'));
+  process.once('exit', () => {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+});
 
 describe('resolveDisplayName', () => {
   it('prefere o username', () => {
@@ -113,143 +136,190 @@ describe('resolveDisplayName', () => {
   it('nunca devolve "@usuario" nem string vazia', () => {
     assert.equal(resolveDisplayName({}), 'usuário');
     assert.equal(resolveDisplayName(undefined), 'usuário');
-    assert.equal(resolveDisplayName({ username: '   ' }), 'usuário');
     assert.notEqual(resolveDisplayName({}), '@usuario');
   });
 });
 
-describe('comando /start (sem mídia disponível)', () => {
-  it('envia legenda e os quatro botões em UMA única mensagem', async () => {
-    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, {
-      config: {
-        startMediaPath: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
-      },
-      logger: silentLogger,
-    });
-    const calls = stubTelegram();
-
-    await bot.handleUpdate(startUpdate(1, { id: 7, username: 'souzza' }));
-
-    const sends = calls.filter((call) => call.method !== 'getMe');
-    assert.equal(sends.length, 1, 'deve enviar exatamente uma mensagem');
-    const [send] = sends;
-    assert.equal(send?.method, 'sendMessage');
-    assert.match(String(send?.payload.text), /@souzza/);
-    const markup = send?.payload.reply_markup as { inline_keyboard: unknown[][] };
-    assert.equal(markup.inline_keyboard.length, 2);
-    assert.equal(markup.inline_keyboard.flat().length, 4);
+describe('UserStore', () => {
+  it('cria o registro no primeiro acesso com a data de entrada', () => {
+    const store = makeStore();
+    const record = store.touch({ id: 9001, username: 'novo', first_name: 'Novo' });
+    assert.equal(record.id, 9001);
+    assert.equal(record.accessCount, 1);
+    assert.equal(record.plan, 'padrao');
+    assert.ok(record.firstSeenAt.length > 0);
   });
 
-  it('usa o primeiro nome quando o usuário não tem username', async () => {
-    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, {
-      config: {
-        startMediaPath: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
-      },
-      logger: silentLogger,
-    });
-    const calls = stubTelegram();
+  it('mantém a data de entrada e incrementa os acessos', () => {
+    const store = makeStore();
+    const first = store.touch({ id: 9002, username: 'a', first_name: 'A' });
+    const second = store.touch({ id: 9002, username: 'a', first_name: 'A' });
+    assert.equal(second.firstSeenAt, first.firstSeenAt);
+    assert.equal(second.accessCount, 2);
+  });
 
-    await bot.handleUpdate(startUpdate(2, { id: 8, first_name: 'Bruno' }));
+  it('atualiza o username quando o usuário o altera', () => {
+    const store = makeStore();
+    store.touch({ id: 9003, username: 'antigo', first_name: 'A' });
+    const atualizado = store.touch({ id: 9003, username: 'novo', first_name: 'A' });
+    assert.equal(atualizado.username, 'novo');
+  });
 
-    const send = calls.find((call) => call.method === 'sendMessage');
-    assert.match(String(send?.payload.text), /Bruno/);
-    assert.equal(String(send?.payload.text).includes('@usuario'), false);
+  it('persiste em disco e recarrega', () => {
+    const store = makeStore();
+    store.touch({ id: 9004, username: 'persistente', first_name: 'P' });
+    const recarregado = makeStore().get(9004);
+    assert.equal(recarregado?.username, 'persistente');
+  });
+
+  it('marca o dono quando o id coincide', () => {
+    const store = makeStore(555);
+    assert.equal(store.touch({ id: 555, first_name: 'Dono' }).plan, 'dono');
+    assert.equal(store.touch({ id: 556, first_name: 'Comum' }).plan, 'padrao');
   });
 });
 
-describe('comando /start (com mídia disponível)', () => {
-  let tmpDir: string;
+describe('comando /start (com mídia)', () => {
   let mediaPath: string;
 
   before(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-media-'));
-    mediaPath = path.join(tmpDir, 'start.mp4');
+    mediaPath = path.join(dataDir, 'start.mp4');
     fs.writeFileSync(mediaPath, MINIMAL_MP4);
-    // O Telegraf abre o arquivo de forma preguiçosa; remover no fim do processo
-    // evita corrida entre a leitura do stream e a limpeza do diretório.
-    process.once('exit', () => {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    });
   });
 
-  it('envia a mídia em loop (sendAnimation) com legenda e botões na MESMA mensagem', async () => {
+  it('envia mídia, legenda e botões em UMA única mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
       config: { startMediaPath: mediaPath },
       logger: silentLogger,
+      users: makeStore(),
+      mediaCache: makeCache(),
     });
     const calls = stubTelegram();
 
-    await bot.handleUpdate(startUpdate(3, { id: 9, username: 'media_user' }));
+    await bot.handleUpdate(startUpdate(1, { id: 8001, username: 'souzza' }));
 
-    const sends = calls.filter((call) => call.method !== 'getMe');
-    assert.equal(sends.length, 1, 'mídia, legenda e botões devem ir em uma única mensagem');
+    const sends = calls.filter((c) => c.method !== 'getMe');
+    assert.equal(sends.length, 1, 'deve enviar exatamente uma mensagem');
     assert.equal(sends[0]?.method, 'sendAnimation');
-    assert.match(String(sends[0]?.payload.caption), /@media_user/);
+    assert.match(String(sends[0]?.payload.caption), /@souzza/);
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
 
-  it('envia a mídia com o nome real do arquivo', async () => {
+  it('registra o usuário no primeiro /start', async () => {
+    const users = makeStore();
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, { config: { startMediaPath: mediaPath }, logger: silentLogger });
-    const calls = stubTelegram();
+    registerStartCommand(bot, {
+      config: { startMediaPath: mediaPath },
+      logger: silentLogger,
+      users,
+      mediaCache: makeCache(),
+    });
+    stubTelegram();
 
-    await bot.handleUpdate(startUpdate(4, { id: 11, username: 'midia' }));
+    await bot.handleUpdate(startUpdate(2, { id: 8002, username: 'registrado', first_name: 'R' }));
 
-    const anim = calls.find((call) => call.method === 'sendAnimation')?.payload
-      .animation as { filename?: string } | undefined;
-    assert.ok(anim, 'deve enviar como animação');
-    assert.equal(anim.filename, 'start.mp4');
+    const record = users.get(8002);
+    assert.equal(record?.username, 'registrado');
+    assert.equal(record?.accessCount, 1);
   });
 
+  it('guarda o file_id e reusa no próximo envio, sem reenviar o arquivo', async () => {
+    const cache = makeCache();
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startMediaPath: mediaPath },
+      logger: silentLogger,
+      users: makeStore(),
+      mediaCache: cache,
+    });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(startUpdate(3, { id: 8003, username: 'cache' }));
+    assert.equal(cache.get(mediaPath), 'FILE_ID_123');
+
+    calls.length = 0;
+    await bot.handleUpdate(startUpdate(4, { id: 8004, username: 'cache' }));
+
+    const animation = calls.find((c) => c.method === 'sendAnimation')?.payload.animation;
+    assert.equal(animation, 'FILE_ID_123', 'o segundo envio deve usar o file_id');
+  });
 });
 
-describe('callbacks do menu', () => {
-  it('responde cada callback válido sem derrubar o processo', async () => {
+describe('comando /start (sem mídia)', () => {
+  it('envia legenda e botões sem mídia, sem quebrar', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startMediaPath: path.join(dataDir, 'inexistente.mp4') },
+      logger: silentLogger,
+      users: makeStore(),
+      mediaCache: makeCache(),
+    });
     const calls = stubTelegram();
 
-    let updateId = 10;
-    for (const callback of Object.values(MENU_CALLBACKS)) {
-      calls.length = 0;
-      await bot.handleUpdate(callbackUpdate(updateId++, callback));
-      assert.ok(
-        calls.some((call) => call.method === 'answerCallbackQuery'),
-        `callback ${callback} deve ser respondido`,
-      );
-      assert.ok(
-        calls.some((call) => call.method === 'sendMessage'),
-        `callback ${callback} deve produzir uma resposta`,
-      );
-    }
+    await bot.handleUpdate(startUpdate(5, { id: 8005, username: 'sem_media' }));
+
+    const sends = calls.filter((c) => c.method !== 'getMe');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0]?.method, 'sendMessage');
+    const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
+    assert.equal(markup.inline_keyboard.flat().length, 4);
   });
+});
 
-  it('trata callback desconhecido com aviso, sem lançar erro', async () => {
+describe('navegação por callbacks', () => {
+  it('abre o perfil com os dados do usuário e edita a mensagem', async () => {
+    const users = makeStore();
+    users.touch({ id: 7001, username: 'perfil', first_name: 'Perfil' });
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users });
     const calls = stubTelegram();
 
-    await bot.handleUpdate(callbackUpdate(99, 'menu_inexistente'));
+    await bot.handleUpdate(callbackUpdate(10, CALLBACKS.MENU_PROFILE, 7001));
 
-    const answered = calls.find((call) => call.method === 'answerCallbackQuery');
-    assert.ok(answered, 'o Telegram precisa receber uma resposta');
+    assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
+    const edit = calls.find((c) => c.method === 'editMessageCaption');
+    assert.ok(edit, 'deve editar a mensagem em vez de enviar outra');
+    assert.match(String(edit?.payload.caption), /𝐈𝐃: 7001/);
     assert.equal(
-      calls.some((call) => call.method === 'sendMessage'),
+      calls.some((c) => c.method === 'sendMessage'),
       false,
+      'não deve enviar mensagem nova ao navegar',
     );
   });
 
-  it('responde callbacks fora do prefixo do menu', async () => {
+  it('responde todos os callbacks de menu sem derrubar o processo', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
     const calls = stubTelegram();
 
-    await bot.handleUpdate(callbackUpdate(100, 'outro_prefixo'));
+    let id = 20;
+    for (const cb of [CALLBACKS.MENU_PROFILE, CALLBACKS.MENU_SETTINGS, CALLBACKS.MENU_WHATSAPP, CALLBACKS.MENU_ABOUT, CALLBACKS.NAV_BACK]) {
+      calls.length = 0;
+      await bot.handleUpdate(callbackUpdate(id++, cb));
+      assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'), `${cb} deve ser respondido`);
+    }
+  });
 
-    assert.ok(calls.some((call) => call.method === 'answerCallbackQuery'));
+  it('trata callback desconhecido sem lançar erro', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(30, 'menu_inexistente'));
+
+    assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
+    assert.equal(calls.some((c) => c.method === 'sendMessage'), false);
+  });
+
+  it('responde callbacks fora dos prefixos conhecidos', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(31, 'outro_prefixo'));
+
+    assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
   });
 });

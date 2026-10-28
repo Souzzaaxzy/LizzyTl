@@ -20,6 +20,8 @@ export interface Config {
   logLevel: LogLevel;
   /** Diretório usado para dados locais privados (sessões futuras do WhatsApp). */
   dataDir: string;
+  /** ID do dono do bot, quando configurado. Recebe o plano "dono". */
+  ownerTelegramId?: number;
 }
 
 export interface LoadConfigOptions {
@@ -100,6 +102,12 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
   const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
+  const rawOwnerId = (env.OWNER_TELEGRAM_ID ?? '').trim();
+  const parsedOwnerId = rawOwnerId === '' ? undefined : Number(rawOwnerId);
+  const ownerTelegramId =
+    parsedOwnerId !== undefined && Number.isInteger(parsedOwnerId) && parsedOwnerId > 0
+      ? parsedOwnerId
+      : undefined;
 
   return {
     telegramBotToken: rawToken,
@@ -108,5 +116,6 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
       : path.resolve(projectRoot, rawMediaPath),
     logLevel,
     dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),
+    ownerTelegramId,
   };
 }

@@ -3,6 +3,7 @@
  *
  * Responsabilidades desta etapa:
  * - Carregar .env e validar a configuração obrigatória.
+ * - Preparar a persistência local (usuários e cache de mídia).
  * - Registrar comandos e callbacks do Telegram.
  * - Iniciar o bot e tratar falhas/encerramento de forma organizada.
  *
@@ -12,6 +13,8 @@
 import { ConfigError, loadConfig } from './config/config';
 import { PROJECT_ROOT, loadEnvFile } from './config/env';
 import { createLogger } from './core/logger';
+import { MediaCache } from './data/media-cache';
+import { UserStore } from './data/user-store';
 import { registerStartCommand } from './telegram/commands/start';
 import { createBot } from './telegram/client';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler';
@@ -43,9 +46,16 @@ async function main(): Promise<void> {
   const whatsapp = getWhatsAppIntegrationStatus();
   logger.info(`Estado da integração com WhatsApp: ${whatsapp.state} — ${whatsapp.summary}`);
 
+  const users = new UserStore({
+    dataDir: config.dataDir,
+    logger,
+    ownerId: config.ownerTelegramId,
+  });
+  const mediaCache = new MediaCache(config.dataDir, logger);
+
   const bot = createBot({ token: config.telegramBotToken, logger });
-  registerStartCommand(bot, { config, logger });
-  registerCallbackHandler(bot, { logger });
+  registerStartCommand(bot, { config, logger, users, mediaCache });
+  registerCallbackHandler(bot, { logger, users });
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`Encerrando após ${signal}...`);

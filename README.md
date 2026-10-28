@@ -17,6 +17,7 @@ funcionalidade foi implementada nesta fase.
 - [Instalação no Termux](#instalação-no-termux)
 - [Configuração do token](#configuração-do-token)
 - [Localização da mídia](#localização-da-mídia)
+- [Perfil](#perfil)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
 - [Como executar os testes](#como-executar-os-testes)
 - [Solução para problemas comuns](#solução-para-problemas-comuns)
@@ -101,6 +102,8 @@ LOG_LEVEL=info
   com uma mensagem explicando como configurá-lo, sem imprimir o token.
 - `START_MEDIA_PATH` é o caminho da mídia do menu. Aceita caminho relativo à
   raiz do projeto ou absoluto. O valor padrão é `assets/start.mp4`.
+- `OWNER_TELEGRAM_ID` é opcional. Quando definido, o usuário com esse ID
+  recebe o plano `Dono` no perfil.
 - `LOG_LEVEL` aceita `error`, `warn`, `info` ou `debug`. Valores inválidos
   assumem `info`.
 - `DATA_DIR` é opcional e reserva um diretório para dados locais privados
@@ -141,6 +144,52 @@ gravador, então **não é necessária uma conexão real com o Telegram**. Eles
 cobrem: token ausente, mídia ausente, mídia presente, saudação com e sem username,
 disposição e callbacks dos quatro botões, callbacks inválidos e ausência de
 segredos nas mensagens de erro.
+
+## Perfil
+
+O botão **👤 Perfil** abre um cartão com os dados do usuário, lidos de
+`data/users.json`:
+
+```
+👤 𝐏𝐞𝐫𝐟𝐢𝐥
+
+♛ 𝐍𝐨𝐦𝐞: Souzza
+✦ 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨: @souzza
+✧ 𝐈𝐃: 6001
+
+♛ 𝐏𝐥𝐚𝐧𝐨: 𝐏𝐚𝐝𝐫𝐚̃𝐨
+✦ 𝐄𝐧𝐭𝐫𝐨𝐮 𝐞𝐦: 28/10/2026
+✧ 𝐀𝐜𝐞𝐬𝐬𝐨𝐬: 7
+```
+
+O perfil é somente leitura nesta etapa, e toda tela tem o botão **⬅️ Voltar**
+para o menu principal. Ao navegar, a legenda da mensagem é editada em vez de
+enviar outra — assim a mídia continua rodando e o chat não enche de mensagens.
+
+### Dados salvos
+
+Tudo fica em `data/`, que não é versionado:
+
+| Arquivo | Conteúdo |
+| --- | --- |
+| `data/users.json` | Usuários: nome, username, plano, data de entrada, acessos |
+| `data/media-cache.json` | `file_id` da mídia, para não reenviar o arquivo |
+
+A data de entrada é gravada no **primeiro `/start`**, não ao abrir o perfil. A
+escrita é atômica (grava em arquivo temporário e renomeia), para não corromper
+o JSON se o processo cair no meio.
+
+Apagar o `data/users.json` zera todos os perfis.
+
+### Dono
+
+Defina `OWNER_TELEGRAM_ID` no `.env` com o seu ID numérico do Telegram. Quem
+tiver esse ID aparece com o plano `Dono` no perfil; os demais ficam como
+`Padrão`. Para descobrir seu ID: abra o Perfil no bot e veja o campo `𝐈𝐃`.
+
+### Planos
+
+Hoje existem apenas `Padrão` e `Dono`. Novos planos serão adicionados depois.
 
 ## Solução para problemas comuns
 

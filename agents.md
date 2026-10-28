@@ -73,13 +73,29 @@ exibir como animação, e nessa reencodagem o loop se perde.
 - Não use `sendDocument`: preserva a extensão, mas não roda em loop no balão.
 - Não use GIF como fonte: foram cinco tentativas falhas até chegar no MP4 puro.
 
+## Arquitetura das telas
+
+- `src/telegram/screens/screens.ts` centraliza legendas, teclados e callbacks.
+  Adicione uma tela nova lá e registre no `screenForCallback`.
+- `src/telegram/handlers/callback-handler.ts` só traduz callback em tela e
+  renderiza. Ele **edita** a mensagem (`editMessageCaption`) em vez de enviar
+  outra, para a mídia continuar rodando e o chat não encher.
+- Toda tela interna tem o botão `⬅️ Voltar` (`nav_back`).
+- `src/data/` guarda a persistência local: `users.json` e `media-cache.json`.
+  Ambos em `DATA_DIR`, que não é versionado.
+- Novos campos de perfil vão em `UserRecord` (`src/data/user-store.ts`) e na
+  legenda em `buildProfileCaption`.
+
 ## Estado atual (primeira etapa)
 
-Implementado: configuração validada, logger, comando `/start` com GIF + legenda
-+ botões em uma única mensagem, menu de quatro botões em duas colunas e
-tratamento de callbacks.
+Implementado: configuração validada, logger, `/start` com mídia + legenda +
+botões em uma única mensagem, menu de quatro botões, tela de perfil com dados
+persistidos, navegação com botão de voltar e tratamento de callbacks.
 
-- `assets/start.gif` já está no repositório (540x300, 10 fps).
+- `assets/start.mp4` é a única mídia do menu (540x300, H.264, sem áudio).
+- Persistência local em `data/`: `users.json` e `media-cache.json`.
+- Planos: `padrao` e `dono` (`OWNER_TELEGRAM_ID` define o dono).
 - O token real fica apenas no `.env` local, que não é versionado.
 
-Pendente e dependente do proprietário: definição do fork da Baileys.
+Pendente e dependente do proprietário: ID do dono e definição do fork da
+Baileys.
