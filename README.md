@@ -367,13 +367,29 @@ Hoje existem apenas `Padrão` e `Dono`. Novos planos serão adicionados depois.
 
 ## Solução para problemas comuns
 
-- **`EALLOWGIT: Fetching packages of type "git" have been disabled`** — npm 11.20+
-  bloqueia dependências git por padrão. Este projeto **não precisa** de flag:
-  o fork é instalado pelo tarball do commit, não por `github:`. Se você vir esse
-  erro, seu `package.json` está desatualizado — rode `git pull` antes do
-  `npm install`.
-- **Erro de SSH ao instalar (`git+ssh://git@github.com`)** — mesma causa. O
-  tarball evita SSH por completo, então o servidor não precisa de chave SSH.
+- **`EALLOWGIT` ou `EALLOWREMOTE`: "Fetching packages of type ... have been
+  disabled"** — o npm 11.20+ bloqueia dependências que não vêm do registro
+  oficial: `git`, `remote`, `file` e `directory`. Como o fork da Baileys **não
+  está publicado no npm**, ele cai numa dessas categorias e o npm recusa.
+
+  Use **`npm run setup`** em vez de `npm install` — esse script já passa as
+  permissões necessárias. É o único motivo pelo qual ele existe.
+
+  ```bash
+  npm run setup
+  npm start
+  ```
+
+  O equivalente direto é `npm install --allow-remote=all --allow-git=all`.
+
+- **Dezenas de erros `TS2xxx` / `Cannot find name 'process'` no build** — sintoma
+  de `npm install` que não completou. Sem `node_modules` falta o `@types/node`,
+  e o TypeScript acusa erro em tudo. Resolva a instalação primeiro; os erros
+  somem sozinhos.
+
+- **Erro de SSH ao instalar (`git+ssh://git@github.com`)** — o projeto usa o
+  tarball do commit, que não passa por SSH. Se aparecer, seu
+  `package-lock.json` é antigo: apague-o e rode `npm run setup` de novo.
 
 - **`Error: Cannot find module '.../dist/index.js'`** — o `dist/` é artefato de
   build e não vai para o Git, então um clone novo não o possui. O `npm start`
