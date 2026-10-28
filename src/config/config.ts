@@ -26,6 +26,10 @@ export interface LoadConfigOptions {
   env?: NodeJS.ProcessEnv;
   /** Raiz do projeto; permite resolver caminhos relativos de forma portátil. */
   projectRoot?: string;
+  /** Caminho onde o .env foi procurado (usado para orientar o operador). */
+  envFilePath?: string;
+  /** Se o arquivo .env existe (usado para orientar o operador). */
+  envFileExists?: boolean;
 }
 
 export class ConfigError extends Error {
@@ -37,17 +41,45 @@ export class ConfigError extends Error {
 
 const TOKEN_PLACEHOLDER = 'coloque-o-token-do-botfather-aqui';
 
-const TOKEN_HELP = [
-  'TELEGRAM_BOT_TOKEN não foi configurado.',
-  '',
-  'Como resolver:',
-  '  1. Copie o modelo: cp .env.example .env',
-  '  2. Abra o Telegram e fale com o @BotFather.',
-  '  3. Envie /newbot (ou /token para um bot existente) e copie o token.',
-  '  4. Cole o valor em .env na linha TELEGRAM_BOT_TOKEN=...',
-  '',
-  'O arquivo .env não é versionado e o token nunca é exibido nos logs.',
-].join('\n');
+/** Monta a orientação adequada para cada situação de token ausente. */
+export function buildTokenHelp(options: {
+  envFilePath: string;
+  envFileExists: boolean;
+  projectRoot: string;
+}): string {
+  const { envFilePath, envFileExists, projectRoot } = options;
+
+  const cause = envFileExists
+    ? [
+        `O arquivo .env foi encontrado em:`,
+        `  ${envFilePath}`,
+        '',
+        'Mas a linha TELEGRAM_BOT_TOKEN está vazia.',
+      ]
+    : [
+        'Nenhum arquivo .env foi encontrado.',
+        `Procurado em:`,
+        `  ${envFilePath}`,
+      ];
+
+  return [
+    'TELEGRAM_BOT_TOKEN não foi configurado.',
+    '',
+    ...cause,
+    '',
+    'Como resolver:',
+    `  1. Entre na pasta do projeto: cd ${projectRoot}`,
+    '  2. Se o .env ainda não existir, crie a partir do modelo: cp .env.example .env',
+    '  3. Abra o Telegram e fale com o @BotFather.',
+    '  4. Envie /newbot (ou /token para um bot existente) e copie o token.',
+    '  5. Cole o valor em .env na linha TELEGRAM_BOT_TOKEN=... (sem espaços e sem aspas).',
+    '',
+    'Formato esperado: TELEGRAM_BOT_TOKEN=<numero-do-bot>:<segredo>',
+    'O valor vem inteiro, sem espaços e sem aspas ao redor.',
+    '',
+    'O arquivo .env não é versionado e o token nunca é exibido nos logs.',
+  ].join('\n');
+}
 
 export function loadConfig(options: LoadConfigOptions = {}): Config {
   const env = options.env ?? process.env;
@@ -55,7 +87,13 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
 
   const rawToken = (env.TELEGRAM_BOT_TOKEN ?? '').trim();
   if (rawToken.length === 0 || rawToken === TOKEN_PLACEHOLDER) {
-    throw new ConfigError(TOKEN_HELP);
+    throw new ConfigError(
+      buildTokenHelp({
+        envFilePath: options.envFilePath ?? path.join(projectRoot, '.env'),
+        envFileExists: options.envFileExists ?? false,
+        projectRoot,
+      }),
+    );
   }
 
   const rawGifPath = (env.START_GIF_PATH ?? '').trim() || 'assets/start.gif';

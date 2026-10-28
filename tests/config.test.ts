@@ -69,4 +69,48 @@ describe('loadConfig', () => {
       assert.match(error.message, /@BotFather/);
     }
   });
+
+  it('informa o caminho verificado quando o .env não existe', () => {
+    try {
+      loadConfig({
+        env: {},
+        projectRoot: PROJECT_ROOT,
+        envFilePath: path.join(PROJECT_ROOT, '.env'),
+        envFileExists: false,
+      });
+      assert.fail('deveria ter lançado ConfigError');
+    } catch (error) {
+      assert.ok(error instanceof ConfigError);
+      assert.match(error.message, /Nenhum arquivo \.env foi encontrado/);
+      assert.match(error.message, /\.env/);
+    }
+  });
+
+  it('distingue o caso em que o .env existe mas o token está vazio', () => {
+    try {
+      loadConfig({
+        env: { TELEGRAM_BOT_TOKEN: '' },
+        projectRoot: PROJECT_ROOT,
+        envFilePath: path.join(PROJECT_ROOT, '.env'),
+        envFileExists: true,
+      });
+      assert.fail('deveria ter lançado ConfigError');
+    } catch (error) {
+      assert.ok(error instanceof ConfigError);
+      assert.match(error.message, /arquivo \.env foi encontrado/);
+      assert.match(error.message, /está vazia/);
+      assert.equal(error.message.includes('Nenhum arquivo'), false);
+    }
+  });
+
+  it('orienta com o caminho do projeto e o formato esperado do token', () => {
+    try {
+      loadConfig({ env: {}, projectRoot: PROJECT_ROOT, envFileExists: false });
+      assert.fail('deveria ter lançado ConfigError');
+    } catch (error) {
+      assert.ok(error instanceof ConfigError);
+      assert.match(error.message, /cd .*project/);
+      assert.match(error.message, /TELEGRAM_BOT_TOKEN=<numero-do-bot>:<segredo>/);
+    }
+  });
 });

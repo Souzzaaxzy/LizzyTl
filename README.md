@@ -158,8 +158,15 @@ segredos nas mensagens de erro.
 
   Confirme também que o `npm install` foi executado e que você está na pasta do
   projeto (onde ficam o `package.json` e o `src/`).
-- **"TELEGRAM_BOT_TOKEN não foi configurado."** — crie o `.env` a partir do
-  `.env.example` e informe o token.
+- **"TELEGRAM_BOT_TOKEN não foi configurado."** — a própria mensagem mostra qual
+  dos dois casos ocorreu:
+  - *Nenhum arquivo .env foi encontrado* — você precisa criá-lo:
+    `cp .env.example .env`.
+  - *O arquivo .env foi encontrado, mas a linha está vazia* — o arquivo existe,
+    falta colar o token nele.
+
+  Nos dois casos, edite o `.env` e preencha a linha
+  `TELEGRAM_BOT_TOKEN=<numero-do-bot>:<segredo>`, sem espaços e sem aspas.
 - **`401 Unauthorized`** — o token está incorreto ou expirado. Gere um novo com
   o @BotFather.
 - **`409 Conflict`** — existe outra instância do mesmo bot em execução. Encerre

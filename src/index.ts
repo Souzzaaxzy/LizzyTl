@@ -9,9 +9,8 @@
  * A conexão do WhatsApp é independente e não é iniciada aqui.
  */
 
-import 'dotenv/config';
-
 import { ConfigError, loadConfig } from './config/config';
+import { PROJECT_ROOT, loadEnvFile } from './config/env';
 import { createLogger } from './core/logger';
 import { registerStartCommand } from './telegram/commands/start';
 import { createBot } from './telegram/client';
@@ -19,9 +18,16 @@ import { registerCallbackHandler } from './telegram/handlers/callback-handler';
 import { getWhatsAppIntegrationStatus } from './whatsapp/client';
 
 async function main(): Promise<void> {
+  // Carrega o .env a partir da raiz do projeto, e não do diretório atual.
+  const envFile = loadEnvFile();
+
   let config;
   try {
-    config = loadConfig();
+    config = loadConfig({
+      projectRoot: PROJECT_ROOT,
+      envFilePath: envFile.path,
+      envFileExists: envFile.exists,
+    });
   } catch (error) {
     if (error instanceof ConfigError) {
       // Mensagem clara para o operador; o token nunca é impresso.
