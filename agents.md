@@ -60,6 +60,18 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - A conexão do WhatsApp deve poder rodar no mesmo processo que o Telegram, com
   tratamento de falhas independente.
 
+## Ferramentas (download de redes sociais)
+
+- A tela `tools` reúne os downloads: Instagram, YouTube, Facebook, X, TikTok.
+- Os botões existem, mas **as funcionalidades ainda não foram implementadas**.
+  As telas dizem isso explicitamente — nunca afirmar que algo funciona sem
+  funcionar.
+- Para implementar: o fork expõe `downloadMediaMessage` em
+  `lib/Utils/messages.js`, e o socket já escuta eventos via `socket.ev.on`.
+  O `WhatsAppClient` precisará de um listener de `messages.upsert`.
+- O teste "as telas das ferramentas dizem que estão em implementação" falha se
+  alguém remover o aviso de uma tela sem implementar a função.
+
 ## Notificações e texto tocável
 
 - Textos que o usuário deve copiar (código de pareamento, ID no perfil) vão em

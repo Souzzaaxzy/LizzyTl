@@ -19,6 +19,7 @@ funcionalidade foi implementada nesta fase.
 - [Localização da mídia](#localização-da-mídia)
 - [Comandos](#comandos)
 - [Proteção contra abuso](#proteção-contra-abuso)
+- [Ferramentas](#ferramentas)
 - [WhatsApp](#whatsapp)
 - [Painel do dono](#painel-do-dono)
 - [Perfil](#perfil)
@@ -189,6 +190,38 @@ O dono é isento, porque administrar o bot envolve muitos cliques seguidos.
 
 Valores inválidos nas variáveis caem no padrão, para uma configuração mal
 preenchida nunca desligar a proteção.
+
+## Ferramentas
+
+A tela inicial tem o botão **🛠️ Ferramentas**, em linha própria (largura total,
+como o painel do dono), disponível para **todos os usuários**.
+
+Dentro dela, os serviços de download, em duas colunas:
+
+```
+┌──────────────┬──────────────┐
+│ 📸 Instagram │  ▶️ YouTube  │
+├──────────────┼──────────────┤
+│ 📘 Facebook  │     ✖️ X     │
+├──────────────┴──────────────┤
+│          🎵 TikTok          │
+├─────────────────────────────┤
+│         ⬅️ Voltar           │
+└─────────────────────────────┘
+```
+
+**Estado atual:** os botões e as telas existem, mas o download **ainda não foi
+implementado**. Cada tela diz isso de forma explícita — o bot nunca afirma que
+uma operação funciona sem ela existir.
+
+### Adicionar uma ferramenta nova
+
+1. Em `src/telegram/screens/screens.ts`, adicione o callback em `CALLBACKS` e o
+   id em `ScreenId`
+2. Adicione o botão em `buildToolsKeyboard()`
+3. Registre a tela em `SCREENS` e ligue no `screenForCallback`
+4. Rode `npm test` — o teste "callbacks alcançáveis" falha se você esquecer
+   algum passo
 
 ## WhatsApp
 

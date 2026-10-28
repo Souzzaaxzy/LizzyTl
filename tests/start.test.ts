@@ -238,7 +238,8 @@ describe('comando /start (com mídia)', () => {
     assert.equal(sends[0]?.method, 'sendAnimation');
     assert.match(String(sends[0]?.payload.caption), /@souzza/);
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
-    assert.equal(markup.inline_keyboard.flat().length, 4);
+    // Quatro de navegação mais Ferramentas, em linha própria.
+    assert.equal(markup.inline_keyboard.flat().length, 5);
   });
 
   it('registra o usuário no primeiro /start', async () => {
@@ -301,7 +302,8 @@ describe('comando /start (sem mídia)', () => {
     assert.equal(sends.length, 1);
     assert.equal(sends[0]?.method, 'sendMessage');
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
-    assert.equal(markup.inline_keyboard.flat().length, 4);
+    // Quatro de navegação mais Ferramentas, em linha própria.
+    assert.equal(markup.inline_keyboard.flat().length, 5);
   });
 });
 
@@ -386,7 +388,7 @@ describe('comando /help', () => {
       assert.match(String(send?.payload.text), new RegExp('/' + c.command));
     }
     const markup = send?.payload.reply_markup as { inline_keyboard: unknown[][] };
-    assert.equal(markup.inline_keyboard.flat().length, 4, 'deve trazer o menu');
+    assert.equal(markup.inline_keyboard.flat().length, 5, 'deve trazer o menu');
   });
 });
 
@@ -402,7 +404,7 @@ describe('mensagens que não são comandos', () => {
     assert.ok(send, 'não pode ficar sem resposta');
     assert.match(String(send?.payload.text), /\/start/);
     const markup = send?.payload.reply_markup as { inline_keyboard: unknown[][] };
-    assert.equal(markup.inline_keyboard.flat().length, 4);
+    assert.equal(markup.inline_keyboard.flat().length, 5);
   });
 
   it('o /start tem prioridade sobre a resposta genérica', async () => {

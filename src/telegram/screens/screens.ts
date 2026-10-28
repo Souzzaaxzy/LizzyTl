@@ -26,6 +26,12 @@ export const CALLBACKS = {
   NAV_BACK: 'nav_back',
   WA_CONNECT: 'wa_connect',
   WA_DISCONNECT: 'wa_disconnect',
+  MENU_TOOLS: 'menu_tools',
+  TOOL_INSTAGRAM: 'tool_instagram',
+  TOOL_YOUTUBE: 'tool_youtube',
+  TOOL_FACEBOOK: 'tool_facebook',
+  TOOL_X: 'tool_x',
+  TOOL_TIKTOK: 'tool_tiktok',
   ADMIN_HOME: 'admin_home',
   ADMIN_STATS: 'admin_stats',
   ADMIN_USERS: 'admin_users',
@@ -39,6 +45,12 @@ export type ScreenId =
   | 'settings'
   | 'whatsapp'
   | 'about'
+  | 'tools'
+  | 'toolInstagram'
+  | 'toolYoutube'
+  | 'toolFacebook'
+  | 'toolX'
+  | 'toolTiktok'
   | 'admin'
   | 'adminStats'
   | 'adminUsers';
@@ -171,7 +183,51 @@ export function buildMenuKeyboard(): InlineKeyboardMarkup {
       Markup.button.callback('📱 WhatsApp', CALLBACKS.MENU_WHATSAPP),
       Markup.button.callback('ℹ️ Sobre a Lizzy', CALLBACKS.MENU_ABOUT),
     ],
+    // Largura total, como o painel do dono: as ferramentas não são navegação
+    // comum, então ficam destacadas em linha própria.
+    [Markup.button.callback('🛠️ Ferramentas', CALLBACKS.MENU_TOOLS)],
   ]).reply_markup;
+}
+
+/**
+ * Teclado da tela de ferramentas.
+ *
+ * ┌──────────────┬──────────────┐
+ * │ 📸 Instagram │  ▶️ YouTube  │
+ * ├──────────────┼──────────────┤
+ * │ 📘 Facebook  │     ✖️ X     │
+ * ├──────────────┴──────────────┤
+ * │          🎵 TikTok          │
+ * └─────────────────────────────┘
+ */
+export function buildToolsKeyboard(): InlineKeyboardMarkup {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📸 Instagram', CALLBACKS.TOOL_INSTAGRAM),
+      Markup.button.callback('▶️ YouTube', CALLBACKS.TOOL_YOUTUBE),
+    ],
+    [
+      Markup.button.callback('📘 Facebook', CALLBACKS.TOOL_FACEBOOK),
+      Markup.button.callback('✖️ X', CALLBACKS.TOOL_X),
+    ],
+    [Markup.button.callback('🎵 TikTok', CALLBACKS.TOOL_TIKTOK)],
+    [Markup.button.callback(BACK_BUTTON_LABEL, CALLBACKS.NAV_BACK)],
+  ]).reply_markup;
+}
+
+/**
+ * Tela de uma ferramenta que ainda não foi implementada.
+ *
+ * O botão existe para o usuário saber o que vem, mas a tela diz a verdade:
+ * ainda não está pronto. Nunca afirmamos que uma operação funciona sem ela
+ * existir de fato.
+ */
+function toolScreen(id: ScreenId, titulo: string, descricao: string): Screen {
+  return {
+    id,
+    buildCaption: () => [titulo, '', descricao, '', '♛ 𝐄𝐦 𝐢𝐦𝐩𝐥𝐞𝐦𝐞𝐧𝐭𝐚𝐜̧𝐚̃𝐨.'].join('\n'),
+    buildKeyboard: fixedKeyboard(backKeyboard),
+  };
 }
 
 /**
@@ -191,6 +247,7 @@ export function buildOwnerMenuKeyboard(): InlineKeyboardMarkup {
       Markup.button.callback('📱 WhatsApp', CALLBACKS.MENU_WHATSAPP),
       Markup.button.callback('ℹ️ Sobre a Lizzy', CALLBACKS.MENU_ABOUT),
     ],
+    [Markup.button.callback('🛠️ Ferramentas', CALLBACKS.MENU_TOOLS)],
     [Markup.button.callback('🛡️ Painel do dono', CALLBACKS.ADMIN_HOME)],
   ]).reply_markup;
 }
@@ -434,6 +491,21 @@ export const SCREENS: Record<ScreenId, Screen> = {
       ].join('\n'),
     buildKeyboard: fixedKeyboard(backKeyboard),
   },
+  tools: {
+    id: 'tools',
+    buildCaption: () =>
+      [
+        '🛠️ 𝐅𝐞𝐫𝐫𝐚𝐦𝐞𝐧𝐭𝐚𝐬',
+        '',
+        '♛ 𝐄𝐬𝐜𝐨𝐥𝐡𝐚 𝐨 𝐬𝐞𝐫𝐯𝐢𝐜̧𝐨 𝐩𝐚𝐫𝐚 𝐛𝐚𝐢𝐱𝐚𝐫 𝐨 𝐜𝐨𝐧𝐭𝐞𝐮́𝐝𝐨.',
+      ].join('\n'),
+    buildKeyboard: fixedKeyboard(buildToolsKeyboard),
+  },
+  toolInstagram: toolScreen('toolInstagram', '📸 𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐩𝐨𝐬𝐭𝐬, 𝐑𝐞𝐞𝐥𝐬 𝐞 𝐒𝐭𝐨𝐫𝐢𝐞𝐬.'),
+  toolYoutube: toolScreen('toolYoutube', '▶️ 𝐘𝐨𝐮𝐓𝐮𝐛𝐞', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬 𝐞 𝐒𝐡𝐨𝐫𝐭𝐬.'),
+  toolFacebook: toolScreen('toolFacebook', '📘 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬.'),
+  toolX: toolScreen('toolX', '✖️ 𝐗', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬.'),
+  toolTiktok: toolScreen('toolTiktok', '🎵 𝐓𝐢𝐤𝐓𝐨𝐤', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬 𝐬𝐞𝐦 𝐦𝐚𝐫𝐜𝐚 𝐝\'𝐚́𝐠𝐮𝐚.'),
   admin: {
     id: 'admin',
     ownerOnly: true,
@@ -471,6 +543,18 @@ export function screenForCallback(callbackData: string): Screen | undefined {
       return SCREENS.whatsapp;
     case CALLBACKS.MENU_ABOUT:
       return SCREENS.about;
+    case CALLBACKS.MENU_TOOLS:
+      return SCREENS.tools;
+    case CALLBACKS.TOOL_INSTAGRAM:
+      return SCREENS.toolInstagram;
+    case CALLBACKS.TOOL_YOUTUBE:
+      return SCREENS.toolYoutube;
+    case CALLBACKS.TOOL_FACEBOOK:
+      return SCREENS.toolFacebook;
+    case CALLBACKS.TOOL_X:
+      return SCREENS.toolX;
+    case CALLBACKS.TOOL_TIKTOK:
+      return SCREENS.toolTiktok;
     case CALLBACKS.ADMIN_HOME:
       return SCREENS.admin;
     case CALLBACKS.ADMIN_STATS:

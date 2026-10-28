@@ -13,6 +13,7 @@ import {
   buildMenuCaption,
   buildMenuKeyboard,
   buildProfileCaption,
+  buildToolsKeyboard,
   displayNameFor,
   resolveDisplayName,
   menuKeyboardFor,
@@ -44,7 +45,8 @@ const sampleUser: UserRecord = {
 describe('menu principal', () => {
   it('organiza os quatro botões em duas colunas na ordem exigida', () => {
     const keyboard = buildMenuKeyboard();
-    assert.equal(keyboard.inline_keyboard.length, 2);
+    // Duas linhas de dois botões, mais a linha de largura total das Ferramentas.
+    assert.equal(keyboard.inline_keyboard.length, 3);
     assert.equal(keyboard.inline_keyboard[0]?.length, 2);
     assert.equal(keyboard.inline_keyboard[1]?.length, 2);
 
@@ -54,7 +56,13 @@ describe('menu principal', () => {
     assert.deepEqual(row2, [CALLBACKS.MENU_WHATSAPP, CALLBACKS.MENU_ABOUT]);
 
     const labels = keyboard.inline_keyboard.flat().map((b) => b.text);
-    assert.deepEqual(labels, ['👤 Perfil', '⚙️ Configurações', '📱 WhatsApp', 'ℹ️ Sobre a Lizzy']);
+    assert.deepEqual(labels, [
+      '👤 Perfil',
+      '⚙️ Configurações',
+      '📱 WhatsApp',
+      'ℹ️ Sobre a Lizzy',
+      '🛠️ Ferramentas',
+    ]);
   });
 
   it('gera a saudação preservando a identidade visual', () => {
@@ -141,11 +149,12 @@ describe('navegação entre telas', () => {
     assert.equal(screenForCallback(''), undefined);
   });
 
-  it('o menu tem os quatro botões e o de voltar não aparece nele', () => {
+  it('o menu tem cinco botões e o de voltar não aparece nele', () => {
     const keyboard = SCREENS.menu.buildKeyboard(screenContext(sampleUser));
     const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
     assert.equal(callbacks.includes(CALLBACKS.NAV_BACK), false);
-    assert.equal(callbacks.length, 4);
+    assert.equal(callbacks.length, 5, 'quatro de navegação mais Ferramentas');
+    assert.ok(callbacks.includes(CALLBACKS.MENU_TOOLS));
   });
 });
 
@@ -253,26 +262,28 @@ describe('painel do dono', () => {
     },
   });
 
-  it('o menu do dono tem a linha do painel além dos quatro botões', () => {
+  it('o menu do dono tem Ferramentas e o painel além dos quatro botões', () => {
     const keyboard = menuKeyboardFor(adminCtx(dono));
     const rows = keyboard.inline_keyboard;
-    assert.equal(rows.length, 3, 'três linhas: dois pares e o painel');
+    assert.equal(rows.length, 4, 'dois pares, Ferramentas e o painel');
     const callbacks = rows.flat().map((b) => callbackOf(b));
-    assert.equal(callbacks.length, 5);
+    assert.equal(callbacks.length, 6);
     assert.ok(callbacks.includes(CALLBACKS.ADMIN_HOME), 'o menu leva ao hub do painel');
+    assert.ok(callbacks.includes(CALLBACKS.MENU_TOOLS), 'e também às Ferramentas');
   });
 
   it('o menu de quem não é dono NÃO mostra o painel', () => {
     const keyboard = menuKeyboardFor(screenContext(sampleUser));
     const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
-    assert.equal(callbacks.length, 4);
+    assert.equal(callbacks.length, 5);
     assert.equal(callbacks.includes(CALLBACKS.ADMIN_HOME), false);
     assert.equal(callbacks.includes(CALLBACKS.ADMIN_STATS), false);
+    assert.ok(callbacks.includes(CALLBACKS.MENU_TOOLS), 'Ferramentas é para todos');
   });
 
   it('sem contexto, cai no menu padrão em vez de quebrar', () => {
     const keyboard = menuKeyboardFor();
-    assert.equal(keyboard.inline_keyboard.flat().length, 4);
+    assert.equal(keyboard.inline_keyboard.flat().length, 5);
   });
 
   it('a legenda de estatísticas mostra os números', () => {
@@ -370,5 +381,50 @@ describe('callbacks alcançáveis', () => {
   it('as ações do WhatsApp não são navegação', () => {
     assert.equal(screenForCallback(CALLBACKS.WA_CONNECT), undefined);
     assert.equal(screenForCallback(CALLBACKS.WA_DISCONNECT), undefined);
+  });
+});
+
+
+describe('tela de ferramentas', () => {
+  it('tem as cinco ferramentas e o voltar', () => {
+    const keyboard = buildToolsKeyboard();
+    const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
+
+    assert.ok(callbacks.includes(CALLBACKS.TOOL_INSTAGRAM));
+    assert.ok(callbacks.includes(CALLBACKS.TOOL_YOUTUBE));
+    assert.ok(callbacks.includes(CALLBACKS.TOOL_FACEBOOK));
+    assert.ok(callbacks.includes(CALLBACKS.TOOL_X));
+    assert.ok(callbacks.includes(CALLBACKS.TOOL_TIKTOK));
+    assert.ok(callbacks.includes(CALLBACKS.NAV_BACK), 'precisa ter como voltar');
+    assert.equal(callbacks.length, 6);
+  });
+
+  it('TikTok ocupa a linha inteira', () => {
+    const rows = buildToolsKeyboard().inline_keyboard;
+    // Duas linhas de dois, o TikTok sozinho, e o voltar.
+    assert.equal(rows[0]?.length, 2);
+    assert.equal(rows[1]?.length, 2);
+    assert.equal(rows[2]?.length, 1);
+    assert.equal(callbackOf(rows[2]![0]!), CALLBACKS.TOOL_TIKTOK);
+  });
+
+  it('cada ferramenta abre a própria tela', () => {
+    assert.equal(screenForCallback(CALLBACKS.MENU_TOOLS)?.id, 'tools');
+    assert.equal(screenForCallback(CALLBACKS.TOOL_INSTAGRAM)?.id, 'toolInstagram');
+    assert.equal(screenForCallback(CALLBACKS.TOOL_YOUTUBE)?.id, 'toolYoutube');
+    assert.equal(screenForCallback(CALLBACKS.TOOL_FACEBOOK)?.id, 'toolFacebook');
+    assert.equal(screenForCallback(CALLBACKS.TOOL_X)?.id, 'toolX');
+    assert.equal(screenForCallback(CALLBACKS.TOOL_TIKTOK)?.id, 'toolTiktok');
+  });
+
+  it('as telas das ferramentas dizem que estão em implementação', () => {
+    // Nunca afirmar que funciona sem funcionar: o texto é honesto.
+    for (const id of ['toolInstagram', 'toolYoutube', 'toolFacebook', 'toolX', 'toolTiktok'] as const) {
+      const legenda = SCREENS[id].buildCaption(screenContext(sampleUser));
+      // O texto é escrito em negrito unicode, então verificamos a marcação
+      // estilizada de "implementação", não a grafia ASCII.
+      const AVISO = '𝐄𝐦 𝐢𝐦𝐩𝐥𝐞𝐦𝐞𝐧𝐭𝐚𝐜̧𝐚̃𝐨';
+      assert.ok(legenda.includes(AVISO), `${id} deve avisar que ainda não está pronto`);
+    }
   });
 });
