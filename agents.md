@@ -69,8 +69,13 @@ Nunca declare um teste aprovado sem tê-lo executado.
   desconexão por `userId`.
 - `WhatsappSessionStore` guarda `data/whatsapp/<userId>.json` (número) e
   `data/whatsapp-auth/<userId>/` (credenciais). Nada versionado.
+- `MAX_SESSIONS_PER_USER = 1`: cada usuário tem um número. Reconectar
+  substitui, nunca acumula. Testado em "reconectar o mesmo usuário substitui
+  a sessão, sem acumular".
 - `WHATSAPP_MAX_SESSIONS` limita as sessões simultâneas. Sem teto, muitas
   conexões derrubam o processo e **todas** as sessões caem junto.
+- **Memória medida** (não estimada): ~100 MB fixos do Baileys + ~2 MB por
+  sessão ociosa. 30 sessões = ~170 MB. Com tráfego, cada sessão usa mais.
 - O código de pareamento vai para o chat de quem pediu, via
   `onPairingCode(userId, code)`. Nunca para outro usuário.
 

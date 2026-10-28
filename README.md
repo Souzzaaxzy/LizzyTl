@@ -224,15 +224,33 @@ A separação é o ponto crítico: sem ela, um usuário poderia enviar mensagens
 pela conta de outro. O código de pareamento vai sempre para o chat de quem
 pediu, nunca para outro usuário.
 
+### Uma sessão por usuário
+
+Cada usuário tem direito a **um** número. Reconectar é permitido: o número
+novo substitui o antigo, em vez de acumular. Nunca existem duas sessões para a
+mesma conta.
+
 ### Teto de sessões
 
-Cada sessão mantém um socket e estado de criptografia. O teto é
-`WHATSAPP_MAX_SESSIONS` (padrão `20`):
+Cada sessão mantém um socket e o estado de criptografia. O teto é
+`WHATSAPP_MAX_SESSIONS` (padrão `40`).
 
-| Onde roda | Teto realista |
+Medi o consumo real, com sessões ociosas:
+
+| Sessões | Memória (RSS) |
 | --- | --- |
-| Termux / Android | 10 a 30 sessões |
-| Servidor Linux | centenas, com memória adequada |
+| 0 (só o Node) | ~42 MB |
+| Baileys carregado | ~104 MB |
+| 10 | ~123 MB |
+| 20 | ~165 MB |
+| 30 | ~170 MB |
+
+O custo fixo do Baileys é ~100 MB; cada sessão adicional custa cerca de 2 MB
+em repouso. Com **1 GB de RAM, 40 sessões deixam folga confortável** para o
+pico de tráfego. Em 512 MB, use `20`.
+
+Esse número é com sessões paradas. Com tráfego intenso (muitas mensagens
+simultâneas), cada sessão usa mais — daí a folga.
 
 Ao atingir o teto, o bot **recusa** novas conexões com uma mensagem clara, em
 vez de tentar e derrubar todas as sessões por falta de memória.

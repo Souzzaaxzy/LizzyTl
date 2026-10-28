@@ -387,6 +387,28 @@ describe('WhatsAppManager: uma sessão por usuário', () => {
     assert.equal(manager.getStatus(22).state, 'aguardando_pareamento');
   });
 
+  it('reconectar o mesmo usuário substitui a sessão, sem acumular', async () => {
+    const { manager, store } = makeManager();
+
+    await manager.connect(555, '5511955555555');
+    await manager.connect(555, '5511966666666');
+
+    // Uma sessão por usuário: o segundo número substitui o primeiro.
+    assert.equal(manager.activeCount(), 1, 'não acumula sessões na mesma conta');
+    assert.equal(store.get(555).number, '5511966666666', 'vale o número mais recente');
+  });
+
+  it('o teto global conta sessões, não usuários', async () => {
+    const { manager } = makeManager({ maxSessions: 3 });
+
+    await manager.connect(1, '5511911111111');
+    await manager.connect(2, '5511922222222');
+    await manager.connect(3, '5511933333333');
+
+    assert.equal(manager.activeCount(), 3);
+    assert.equal((await manager.connect(4, '5511944444444')).ok, false, 'quarto é recusado');
+  });
+
   it('stopAll encerra todas as sessões', async () => {
     const { manager } = makeManager();
 
