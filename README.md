@@ -17,6 +17,7 @@ funcionalidade foi implementada nesta fase.
 - [Instalação no Termux](#instalação-no-termux)
 - [Configuração do token](#configuração-do-token)
 - [Localização da mídia](#localização-da-mídia)
+- [Comandos](#comandos)
 - [Perfil](#perfil)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
 - [Como executar os testes](#como-executar-os-testes)
@@ -144,6 +145,22 @@ gravador, então **não é necessária uma conexão real com o Telegram**. Eles
 cobrem: token ausente, mídia ausente, mídia presente, saudação com e sem username,
 disposição e callbacks dos quatro botões, callbacks inválidos e ausência de
 segredos nas mensagens de erro.
+
+## Comandos
+
+| Comando | O que faz |
+| --- | --- |
+| `/start` | Abre o menu principal, com a mídia e os quatro botões |
+| `/help` | Mostra a lista de comandos e o menu |
+
+A lista também aparece quando você digita `/` no chat: o bot registra os
+comandos na API do Telegram (`setMyCommands`) ao iniciar. Se esse registro
+falhar (por exemplo, sem internet no boot), o bot continua funcionando
+normalmente e apenas avisa no log.
+
+Qualquer outra mensagem recebe uma resposta apontando para o menu, em vez de
+silêncio. Isso evita a impressão de bot quebrado quando alguém digita algo
+inesperado.
 
 ## Perfil
 

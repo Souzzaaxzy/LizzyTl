@@ -15,9 +15,12 @@ import { PROJECT_ROOT, loadEnvFile } from './config/env';
 import { createLogger } from './core/logger';
 import { MediaCache } from './data/media-cache';
 import { UserStore } from './data/user-store';
+import { registerHelpCommand } from './telegram/commands/help';
+import { publishBotCommands } from './telegram/commands/publish-commands';
 import { registerStartCommand } from './telegram/commands/start';
 import { createBot } from './telegram/client';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler';
+import { registerMessageHandler } from './telegram/handlers/message-handler';
 import { getWhatsAppIntegrationStatus } from './whatsapp/client';
 
 async function main(): Promise<void> {
@@ -54,8 +57,13 @@ async function main(): Promise<void> {
   const mediaCache = new MediaCache(config.dataDir, logger);
 
   const bot = createBot({ token: config.telegramBotToken, logger });
+
+  // Ordem importa: comandos e callbacks primeiro, e a resposta genérica a
+  // mensagens por último, para ela só tratar o que ninguém mais tratou.
   registerStartCommand(bot, { config, logger, users, mediaCache });
+  registerHelpCommand(bot, { logger });
   registerCallbackHandler(bot, { logger, users });
+  registerMessageHandler(bot, { logger });
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`Encerrando após ${signal}...`);
@@ -86,6 +94,8 @@ async function main(): Promise<void> {
     // sucesso; launch() só resolve quando o polling é encerrado.
     await bot.launch({}, () => {
       logger.info('Bot do Telegram em execução.');
+      // Publica a lista de comandos para o menu "/" do Telegram.
+      void publishBotCommands(bot, logger);
     });
   } catch (error) {
     logger.error(

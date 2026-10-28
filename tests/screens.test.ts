@@ -4,11 +4,14 @@ import { describe, it } from 'node:test';
 import type { UserRecord } from '../src/data/user-store';
 import {
   BACK_BUTTON_LABEL,
+  BOT_COMMANDS,
   CALLBACKS,
   SCREENS,
+  buildHelpCaption,
   buildMenuCaption,
   buildMenuKeyboard,
   buildProfileCaption,
+  displayNameFor,
   escapeHtml,
   formatDate,
   screenForCallback,
@@ -135,5 +138,54 @@ describe('navegação entre telas', () => {
     const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
     assert.equal(callbacks.includes(CALLBACKS.NAV_BACK), false);
     assert.equal(callbacks.length, 4);
+  });
+});
+
+
+describe('ajuda e lista de comandos', () => {
+  it('a lista de comandos tem start e help, sem duplicatas', () => {
+    const names = BOT_COMMANDS.map((c) => c.command);
+    assert.deepEqual(names, ['start', 'help']);
+    assert.equal(new Set(names).size, names.length);
+  });
+
+  it('cada comando tem descrição não vazia', () => {
+    for (const c of BOT_COMMANDS) {
+      assert.ok(c.description.trim().length > 0, `${c.command} precisa de descrição`);
+    }
+  });
+
+  it('a legenda de ajuda lista exatamente os comandos publicados', () => {
+    const caption = buildHelpCaption();
+    for (const c of BOT_COMMANDS) {
+      assert.ok(caption.includes(c.command), `ajuda deve citar /${c.command}`);
+      assert.ok(caption.includes(c.description), `ajuda deve descrever /${c.command}`);
+    }
+  });
+
+  it('a legenda de ajuda aponta para o /start', () => {
+    assert.match(buildHelpCaption(), /\/start/);
+  });
+});
+
+describe('saudação ao voltar para o menu', () => {
+  it('usa o @username do usuário registrado', () => {
+    const caption = SCREENS.menu.buildCaption(sampleUser);
+    assert.match(caption, /@souzza/);
+  });
+
+  it('cai para o primeiro nome quando não há username', () => {
+    const caption = SCREENS.menu.buildCaption({ ...sampleUser, username: undefined });
+    assert.match(caption, /Souzza/);
+  });
+
+  it('usa rótulo neutro quando não há registro', () => {
+    const caption = SCREENS.menu.buildCaption(null);
+    assert.match(caption, /usuário/);
+  });
+
+  it('displayNameFor prefere username e cai para o nome', () => {
+    assert.equal(displayNameFor(sampleUser), '@souzza');
+    assert.equal(displayNameFor({ ...sampleUser, username: undefined }), 'Souzza');
   });
 });

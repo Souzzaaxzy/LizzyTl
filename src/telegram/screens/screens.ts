@@ -36,6 +36,29 @@ export const BOT_NAME = '𝐋𝐢𝐳𝐳𝐲 𝐝𝐨 𝐩𝐫𝐢𝐯𝐲';
 
 export const BACK_BUTTON_LABEL = '⬅️ Voltar';
 
+/**
+ * Comandos do bot. Fonte única: alimenta tanto o /help quanto o setMyCommands,
+ * que faz a lista aparecer quando o usuário digita "/" no Telegram.
+ */
+export const BOT_COMMANDS: ReadonlyArray<{ command: string; description: string }> = [
+  { command: 'start', description: 'Abrir o menu principal' },
+  { command: 'help', description: 'Ver os comandos disponíveis' },
+];
+
+/** Legenda da tela de ajuda, montada a partir de BOT_COMMANDS. */
+export function buildHelpCaption(): string {
+  const lines = BOT_COMMANDS.map((c) => `/${c.command} — ${c.description}`);
+  return [
+    '✦ 𝐀𝐣𝐮𝐝𝐚',
+    '',
+    '𝐂𝐨𝐦𝐚𝐧𝐝𝐨𝐬 𝐝𝐢𝐬𝐩𝐨𝐧í𝐯𝐞𝐢𝐬:',
+    '',
+    ...lines,
+    '',
+    '♛ 𝐔𝐬𝐞 /start 𝐩𝐚𝐫𝐚 𝐚𝐛𝐫𝐢𝐫 𝐨 𝐦𝐞𝐧𝐮 𝐩𝐫𝐢𝐧𝐜𝐢𝐩𝐚𝐥.',
+  ].join('\n');
+}
+
 /** Rótulos dos planos exibidos no perfil. */
 export const PLAN_LABELS: Record<Plan, string> = {
   padrao: '𝐏𝐚𝐝𝐫𝐚̃𝐨',
@@ -98,6 +121,14 @@ export function buildMenuKeyboard(): InlineKeyboardMarkup {
   ]).reply_markup;
 }
 
+/**
+ * Nome exibido de um usuário registrado: prefere o @username e cai para o
+ * primeiro nome. Mantém a saudação igual à do /start.
+ */
+export function displayNameFor(user: UserRecord): string {
+  return user.username ? `@${user.username}` : user.firstName;
+}
+
 /** Legenda do perfil, montada a partir do registro do usuário. */
 export function buildProfileCaption(user: UserRecord | null): string {
   if (user === null) {
@@ -123,7 +154,9 @@ export function buildProfileCaption(user: UserRecord | null): string {
 export const SCREENS: Record<ScreenId, Screen> = {
   menu: {
     id: 'menu',
-    buildCaption: () => buildMenuCaption('usuário'),
+    // Usa o nome de quem está navegando; sem registro, cai no rótulo neutro.
+    buildCaption: (user) =>
+      buildMenuCaption(user ? displayNameFor(user) : 'usuário'),
     buildKeyboard: buildMenuKeyboard,
   },
   profile: {

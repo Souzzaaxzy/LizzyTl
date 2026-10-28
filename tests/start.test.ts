@@ -9,10 +9,13 @@ import { Telegram, type Telegraf } from 'telegraf';
 import { createLogger } from '../src/core/logger';
 import { MediaCache } from '../src/data/media-cache';
 import { UserStore } from '../src/data/user-store';
+import { registerHelpCommand } from '../src/telegram/commands/help';
+import { publishBotCommands } from '../src/telegram/commands/publish-commands';
 import { registerStartCommand, resolveDisplayName } from '../src/telegram/commands/start';
 import { createBot } from '../src/telegram/client';
 import { registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
-import { CALLBACKS } from '../src/telegram/screens/screens';
+import { registerMessageHandler } from '../src/telegram/handlers/message-handler';
+import { BOT_COMMANDS, CALLBACKS } from '../src/telegram/screens/screens';
 
 interface RecordedCall {
   method: string;
@@ -95,6 +98,19 @@ function startUpdate(updateId: number, from: { id: number; username?: string; fi
       from: { id: from.id, is_bot: false, ...from },
       text: '/start',
       entities: [{ type: 'bot_command' as const, offset: 0, length: 6 }],
+    },
+  };
+}
+
+function textUpdate(updateId: number, text: string, fromId = 42) {
+  return {
+    update_id: updateId,
+    message: {
+      message_id: updateId,
+      date: Math.floor(Date.now() / 1000),
+      chat: { id: fromId, type: 'private' as const },
+      from: { id: fromId, is_bot: false, first_name: 'Teste' },
+      text,
     },
   };
 }
@@ -321,5 +337,98 @@ describe('navegação por callbacks', () => {
     await bot.handleUpdate(callbackUpdate(31, 'outro_prefixo'));
 
     assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
+  });
+});
+
+
+describe('comando /help', () => {
+  it('responde com a lista de comandos e os botões do menu', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerHelpCommand(bot, { logger: silentLogger });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate({
+      update_id: 50,
+      message: {
+        message_id: 50,
+        date: 1,
+        chat: { id: 42, type: 'private' },
+        from: { id: 42, is_bot: false, first_name: 'Teste' },
+        text: '/help',
+        entities: [{ type: 'bot_command', offset: 0, length: 5 }],
+      },
+    });
+
+    const send = calls.find((c) => c.method === 'sendMessage');
+    assert.ok(send, 'deve responder ao /help');
+    for (const c of BOT_COMMANDS) {
+      assert.match(String(send?.payload.text), new RegExp('/' + c.command));
+    }
+    const markup = send?.payload.reply_markup as { inline_keyboard: unknown[][] };
+    assert.equal(markup.inline_keyboard.flat().length, 4, 'deve trazer o menu');
+  });
+});
+
+describe('mensagens que não são comandos', () => {
+  it('responde texto solto apontando para o menu, sem ficar mudo', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerMessageHandler(bot, { logger: silentLogger });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(textUpdate(60, 'oi'));
+
+    const send = calls.find((c) => c.method === 'sendMessage');
+    assert.ok(send, 'não pode ficar sem resposta');
+    assert.match(String(send?.payload.text), /\/start/);
+    const markup = send?.payload.reply_markup as { inline_keyboard: unknown[][] };
+    assert.equal(markup.inline_keyboard.flat().length, 4);
+  });
+
+  it('o /start tem prioridade sobre a resposta genérica', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startMediaPath: path.join(dataDir, 'inexistente.mp4') },
+      logger: silentLogger,
+      users: makeStore(),
+      mediaCache: makeCache(),
+    });
+    registerMessageHandler(bot, { logger: silentLogger });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(startUpdate(61, { id: 9500, username: 'prioridade' }));
+
+    const sends = calls.filter((c) => c.method === 'sendMessage');
+    assert.equal(sends.length, 1, 'deve responder uma vez só');
+    assert.match(String(sends[0]?.payload.text), /@prioridade/, 'deve ser a saudação do /start');
+  });
+});
+
+describe('publicação dos comandos no Telegram', () => {
+  it('envia a lista de comandos para a API', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    const calls = stubTelegram();
+
+    await publishBotCommands(bot, silentLogger);
+
+    const call = calls.find((c) => c.method === 'setMyCommands');
+    assert.ok(call, 'deve chamar setMyCommands');
+    assert.deepEqual(call?.payload.commands, BOT_COMMANDS.map((c) => ({ command: c.command, description: c.description })));
+  });
+
+  it('não quebra o bot se a publicação falhar', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    stubTelegram();
+    // Força a falha da API apenas neste método.
+    const proto = Telegram.prototype as unknown as {
+      callApi: (m: string, p?: unknown) => Promise<unknown>;
+    };
+    const original = proto.callApi;
+    proto.callApi = (m: string) => {
+      if (m === 'setMyCommands') return Promise.reject(new Error('rede fora'));
+      return Promise.resolve(true);
+    };
+
+    await assert.doesNotReject(() => publishBotCommands(bot, silentLogger));
+    proto.callApi = original;
   });
 });

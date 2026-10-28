@@ -85,6 +85,12 @@ exibir como animação, e nessa reencodagem o loop se perde.
   Ambos em `DATA_DIR`, que não é versionado.
 - Novos campos de perfil vão em `UserRecord` (`src/data/user-store.ts`) e na
   legenda em `buildProfileCaption`.
+- Novos comandos: adicione em `BOT_COMMANDS` (`screens.ts`), crie o módulo em
+  `commands/` e registre no `index.ts`. A lista de `BOT_COMMANDS` alimenta o
+  `/help` e o `setMyCommands`, então não duplique descrições.
+- **A ordem de registro no `index.ts` importa**: comandos e callbacks primeiro,
+  `registerMessageHandler` por último. Ele é o fallback e só deve tratar o que
+  ninguém mais tratou.
 
 ## Estado atual (primeira etapa)
 
