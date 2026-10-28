@@ -60,6 +60,19 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - A conexão do WhatsApp deve poder rodar no mesmo processo que o Telegram, com
   tratamento de falhas independente.
 
+## Lições aprendidas (não repita estes erros)
+
+### Mídia do menu: use MP4 puro, não GIF
+
+O Telegram **não exibe GIF como GIF**. Ele reencoda a mídia para MP4 antes de
+exibir como animação, e nessa reencodagem o loop se perde.
+
+- Use `assets/start.mp4` (H.264, `yuv420p`, sem faixa de áudio).
+- Envie com `sendAnimation` e **sempre** informe `filename`, senão o Telegraf
+  batiza o upload como `animation.mp4`.
+- Não use `sendDocument`: preserva a extensão, mas não roda em loop no balão.
+- Não use GIF como fonte: foram cinco tentativas falhas até chegar no MP4 puro.
+
 ## Estado atual (primeira etapa)
 
 Implementado: configuração validada, logger, comando `/start` com GIF + legenda
