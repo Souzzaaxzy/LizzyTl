@@ -102,8 +102,8 @@ LOG_LEVEL=info
   com uma mensagem explicando como configurá-lo, sem imprimir o token.
 - `START_MEDIA_PATH` é o caminho da mídia do menu. Aceita caminho relativo à
   raiz do projeto ou absoluto. O valor padrão é `assets/start.mp4`.
-- `OWNER_TELEGRAM_ID` é opcional. Quando definido, o usuário com esse ID
-  recebe o plano `Dono` no perfil.
+- `OWNER_TELEGRAM_ID` é opcional e sobrescreve o dono definido no código. O
+  usuário com esse ID recebe o plano `Dono` no perfil.
 - `LOG_LEVEL` aceita `error`, `warn`, `info` ou `debug`. Valores inválidos
   assumem `info`.
 - `DATA_DIR` é opcional e reserva um diretório para dados locais privados
@@ -183,9 +183,13 @@ Apagar o `data/users.json` zera todos os perfis.
 
 ### Dono
 
-Defina `OWNER_TELEGRAM_ID` no `.env` com o seu ID numérico do Telegram. Quem
-tiver esse ID aparece com o plano `Dono` no perfil; os demais ficam como
-`Padrão`. Para descobrir seu ID: abra o Perfil no bot e veja o campo `𝐈𝐃`.
+O ID do dono está definido no código (`DEFAULT_OWNER_TELEGRAM_ID`, em
+`src/config/config.ts`). Quem tiver esse ID aparece com o plano `Dono` no
+perfil; os demais ficam como `Padrão`.
+
+Para trocar o dono sem mexer no código, defina `OWNER_TELEGRAM_ID` no `.env` —
+esse valor tem prioridade sobre o do código. Para descobrir um ID: abra o
+Perfil no bot e veja o campo `𝐈𝐃`.
 
 ### Planos
 

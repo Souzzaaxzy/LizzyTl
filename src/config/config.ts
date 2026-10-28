@@ -83,6 +83,15 @@ export function buildTokenHelp(options: {
   ].join('\n');
 }
 
+/**
+ * ID do dono do bot, usado como valor padrão.
+ *
+ * Fica no código de propósito: é um identificador do proprietário, não um
+ * segredo, e assim o plano "Dono" funciona sem depender de configuração. Pode
+ * ser sobrescrito por OWNER_TELEGRAM_ID no .env.
+ */
+export const DEFAULT_OWNER_TELEGRAM_ID = 8072791511;
+
 export function loadConfig(options: LoadConfigOptions = {}): Config {
   const env = options.env ?? process.env;
   const projectRoot = options.projectRoot ?? path.resolve(__dirname, '..', '..');
@@ -103,11 +112,9 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
   const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
   const rawOwnerId = (env.OWNER_TELEGRAM_ID ?? '').trim();
-  const parsedOwnerId = rawOwnerId === '' ? undefined : Number(rawOwnerId);
+  const parsedOwnerId = rawOwnerId === '' ? DEFAULT_OWNER_TELEGRAM_ID : Number(rawOwnerId);
   const ownerTelegramId =
-    parsedOwnerId !== undefined && Number.isInteger(parsedOwnerId) && parsedOwnerId > 0
-      ? parsedOwnerId
-      : undefined;
+    Number.isInteger(parsedOwnerId) && parsedOwnerId > 0 ? parsedOwnerId : undefined;
 
   return {
     telegramBotToken: rawToken,

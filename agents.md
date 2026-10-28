@@ -94,7 +94,8 @@ persistidos, navegação com botão de voltar e tratamento de callbacks.
 
 - `assets/start.mp4` é a única mídia do menu (540x300, H.264, sem áudio).
 - Persistência local em `data/`: `users.json` e `media-cache.json`.
-- Planos: `padrao` e `dono` (`OWNER_TELEGRAM_ID` define o dono).
+- Planos: `padrao` e `dono`. O dono vem de `DEFAULT_OWNER_TELEGRAM_ID`
+  (`src/config/config.ts`) e pode ser trocado por `OWNER_TELEGRAM_ID` no `.env`.
 - O token real fica apenas no `.env` local, que não é versionado.
 
 Pendente e dependente do proprietário: ID do dono e definição do fork da

@@ -2,7 +2,11 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { describe, it } from 'node:test';
 
-import { ConfigError, loadConfig } from '../src/config/config';
+import {
+  ConfigError,
+  DEFAULT_OWNER_TELEGRAM_ID,
+  loadConfig,
+} from '../src/config/config';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
@@ -101,6 +105,30 @@ describe('loadConfig', () => {
       assert.match(error.message, /está vazia/);
       assert.equal(error.message.includes('Nenhum arquivo'), false);
     }
+  });
+
+  it('usa o ID do dono definido no código quando o .env não define', () => {
+    const config = loadConfig({
+      env: { TELEGRAM_BOT_TOKEN: '123:ABC' },
+      projectRoot: PROJECT_ROOT,
+    });
+    assert.equal(config.ownerTelegramId, DEFAULT_OWNER_TELEGRAM_ID);
+  });
+
+  it('permite sobrescrever o dono pelo .env', () => {
+    const config = loadConfig({
+      env: { TELEGRAM_BOT_TOKEN: '123:ABC', OWNER_TELEGRAM_ID: '42' },
+      projectRoot: PROJECT_ROOT,
+    });
+    assert.equal(config.ownerTelegramId, 42);
+  });
+
+  it('ignora OWNER_TELEGRAM_ID inválido', () => {
+    const config = loadConfig({
+      env: { TELEGRAM_BOT_TOKEN: '123:ABC', OWNER_TELEGRAM_ID: 'abc' },
+      projectRoot: PROJECT_ROOT,
+    });
+    assert.equal(config.ownerTelegramId, undefined);
   });
 
   it('orienta com o caminho do projeto e o formato esperado do token', () => {
