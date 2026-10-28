@@ -9,7 +9,7 @@
 import { Markup } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
-import type { Plan, UserRecord } from '../../data/user-store';
+import type { Plan, TelegramUserLike, UserRecord } from '../../data/user-store';
 
 /** Identificadores estáveis de callback. Nunca reaproveite um valor antigo. */
 export const CALLBACKS = {
@@ -24,10 +24,23 @@ export type CallbackId = (typeof CALLBACKS)[keyof typeof CALLBACKS];
 
 export type ScreenId = 'menu' | 'profile' | 'settings' | 'whatsapp' | 'about';
 
+/**
+ * Dados disponíveis para montar uma tela.
+ *
+ * `user` é o registro persistido (pode não existir) e `telegramUser` são os
+ * dados que vieram no próprio update. Manter os dois evita que a tela caia em
+ * placeholder quando o registro falta, mesmo tendo o nome real à mão.
+ */
+export interface ScreenContext {
+  user: UserRecord | null;
+  telegramUser?: TelegramUserLike;
+  /** Nome já resolvido para exibição. */
+  displayName: string;
+}
+
 export interface Screen {
   id: ScreenId;
-  /** Recebe o registro do usuário (ou null quando não há) e devolve a legenda. */
-  buildCaption(user: UserRecord | null): string;
+  buildCaption(context: ScreenContext): string;
   buildKeyboard(): InlineKeyboardMarkup;
 }
 
@@ -129,8 +142,39 @@ export function displayNameFor(user: UserRecord): string {
   return user.username ? `@${user.username}` : user.firstName;
 }
 
+/**
+ * Nome para exibição, na ordem: registro persistido, dados do Telegram e, por
+ * último, um rótulo neutro. Nunca devolve "@usuario" nem string vazia.
+ */
+export function resolveDisplayName(
+  user: UserRecord | null,
+  telegramUser?: TelegramUserLike,
+): string {
+  if (user) {
+    return displayNameFor(user);
+  }
+  const username = telegramUser?.username?.trim();
+  if (username) {
+    return `@${username}`;
+  }
+  const firstName = telegramUser?.first_name?.trim();
+  if (firstName) {
+    return firstName;
+  }
+  return 'usuário';
+}
+
+/** Monta o contexto de uma tela a partir do registro e do usuário do Telegram. */
+export function screenContext(
+  user: UserRecord | null,
+  telegramUser?: TelegramUserLike,
+): ScreenContext {
+  return { user, telegramUser, displayName: resolveDisplayName(user, telegramUser) };
+}
+
 /** Legenda do perfil, montada a partir do registro do usuário. */
-export function buildProfileCaption(user: UserRecord | null): string {
+export function buildProfileCaption(context: ScreenContext): string {
+  const { user } = context;
   if (user === null) {
     return ['👤 𝐏𝐞𝐫𝐟𝐢𝐥', '', 'Não foi possível carregar seus dados.'].join('\n');
   }
@@ -154,9 +198,8 @@ export function buildProfileCaption(user: UserRecord | null): string {
 export const SCREENS: Record<ScreenId, Screen> = {
   menu: {
     id: 'menu',
-    // Usa o nome de quem está navegando; sem registro, cai no rótulo neutro.
-    buildCaption: (user) =>
-      buildMenuCaption(user ? displayNameFor(user) : 'usuário'),
+    // Usa o nome resolvido do contexto: registro persistido ou dados do Telegram.
+    buildCaption: (context) => buildMenuCaption(context.displayName),
     buildKeyboard: buildMenuKeyboard,
   },
   profile: {

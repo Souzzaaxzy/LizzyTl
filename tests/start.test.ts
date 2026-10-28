@@ -11,11 +11,11 @@ import { MediaCache } from '../src/data/media-cache';
 import { UserStore } from '../src/data/user-store';
 import { registerHelpCommand } from '../src/telegram/commands/help';
 import { publishBotCommands } from '../src/telegram/commands/publish-commands';
-import { registerStartCommand, resolveDisplayName } from '../src/telegram/commands/start';
+import { registerStartCommand } from '../src/telegram/commands/start';
 import { createBot } from '../src/telegram/client';
 import { registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
 import { registerMessageHandler } from '../src/telegram/handlers/message-handler';
-import { BOT_COMMANDS, CALLBACKS } from '../src/telegram/screens/screens';
+import { BOT_COMMANDS, CALLBACKS, resolveDisplayName } from '../src/telegram/screens/screens';
 
 interface RecordedCall {
   method: string;
@@ -142,17 +142,17 @@ before(() => {
 
 describe('resolveDisplayName', () => {
   it('prefere o username', () => {
-    assert.equal(resolveDisplayName({ username: 'lizzy', first_name: 'Ana' }), '@lizzy');
+    assert.equal(resolveDisplayName(null, { id: 1, username: 'lizzy', first_name: 'Ana' }), '@lizzy');
   });
 
   it('usa o primeiro nome quando não há username', () => {
-    assert.equal(resolveDisplayName({ first_name: 'Ana' }), 'Ana');
+    assert.equal(resolveDisplayName(null, { id: 1, first_name: 'Ana' }), 'Ana');
   });
 
   it('nunca devolve "@usuario" nem string vazia', () => {
-    assert.equal(resolveDisplayName({}), 'usuário');
-    assert.equal(resolveDisplayName(undefined), 'usuário');
-    assert.notEqual(resolveDisplayName({}), '@usuario');
+    assert.equal(resolveDisplayName(null, { id: 1 }), 'usuário');
+    assert.equal(resolveDisplayName(null), 'usuário');
+    assert.notEqual(resolveDisplayName(null), '@usuario');
   });
 });
 

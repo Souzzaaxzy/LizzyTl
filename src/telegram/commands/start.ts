@@ -18,7 +18,7 @@ import type { Config } from '../../config/config';
 import type { Logger } from '../../core/logger';
 import type { MediaCache } from '../../data/media-cache';
 import type { UserStore } from '../../data/user-store';
-import { buildMenuCaption, buildMenuKeyboard } from '../screens/screens';
+import { buildMenuCaption, buildMenuKeyboard, resolveDisplayName } from '../screens/screens';
 
 export interface StartCommandDeps {
   config: Pick<Config, 'startMediaPath'>;
@@ -27,38 +27,15 @@ export interface StartCommandDeps {
   mediaCache: MediaCache;
 }
 
-/**
- * Resolve o nome exibido na saudação.
- * Prefere o @username; se não houver, usa o primeiro nome; por último, um
- * rótulo neutro. Nunca devolve "@usuario" nem uma string vazia.
- */
-export function resolveDisplayName(user?: {
-  username?: string;
-  first_name?: string;
-}): string {
-  const username = user?.username?.trim();
-  if (username) {
-    return `@${username}`;
-  }
-  const firstName = user?.first_name?.trim();
-  if (firstName) {
-    return firstName;
-  }
-  return 'usuário';
-}
-
 export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): void {
   const logger = deps.logger.child('start');
 
   bot.start(async (ctx) => {
-    const displayName = resolveDisplayName(ctx.from);
-    const caption = buildMenuCaption(displayName);
+    // Registra a visita primeiro: é aqui que firstSeenAt é definido.
+    const record = ctx.from ? deps.users.touch(ctx.from) : null;
+    // Mesma função usada pelas telas, para a saudação nunca divergir.
+    const caption = buildMenuCaption(resolveDisplayName(record, ctx.from));
     const keyboard = buildMenuKeyboard();
-
-    // Registra a visita. É aqui que firstSeenAt é definido pela primeira vez.
-    if (ctx.from) {
-      deps.users.touch(ctx.from);
-    }
 
     const mediaPath = deps.config.startMediaPath;
     if (!fs.existsSync(mediaPath)) {

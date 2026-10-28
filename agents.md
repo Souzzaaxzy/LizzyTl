@@ -85,6 +85,11 @@ exibir como animação, e nessa reencodagem o loop se perde.
   Ambos em `DATA_DIR`, que não é versionado.
 - Novos campos de perfil vão em `UserRecord` (`src/data/user-store.ts`) e na
   legenda em `buildProfileCaption`.
+- **Nunca monte legenda só com o registro persistido.** O `Screen.buildCaption`
+  recebe um `ScreenContext` com `user` (pode não existir) e `telegramUser` (vem
+  no update). `resolveDisplayName(user, telegramUser)` é a fonte única do nome:
+  registro, depois Telegram, depois rótulo neutro. Assim a tela não cai em
+  placeholder quando o `data/users.json` está ausente.
 - Novos comandos: adicione em `BOT_COMMANDS` (`screens.ts`), crie o módulo em
   `commands/` e registre no `index.ts`. A lista de `BOT_COMMANDS` alimenta o
   `/help` e o `setMyCommands`, então não duplique descrições.

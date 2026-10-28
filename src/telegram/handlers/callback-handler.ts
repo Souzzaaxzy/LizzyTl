@@ -14,7 +14,7 @@ import type { Context, Telegraf } from 'telegraf';
 
 import type { Logger } from '../../core/logger';
 import type { UserStore } from '../../data/user-store';
-import { screenForCallback, type Screen } from '../screens/screens';
+import { screenContext, screenForCallback, type Screen } from '../screens/screens';
 
 export interface CallbackHandlerDeps {
   logger: Logger;
@@ -48,7 +48,9 @@ async function renderScreen(
 ): Promise<void> {
   const userId = ctx.from?.id;
   const user = userId !== undefined ? deps.users.get(userId) ?? null : null;
-  const caption = screen.buildCaption(user);
+  // Passa também os dados do Telegram: se o registro faltar, a tela ainda
+  // consegue mostrar o nome real em vez de um placeholder.
+  const caption = screen.buildCaption(screenContext(user, ctx.from));
   const keyboard = screen.buildKeyboard();
 
   try {

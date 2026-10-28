@@ -12,6 +12,8 @@ import {
   buildMenuKeyboard,
   buildProfileCaption,
   displayNameFor,
+  resolveDisplayName,
+  screenContext,
   escapeHtml,
   formatDate,
   screenForCallback,
@@ -68,7 +70,7 @@ describe('menu principal', () => {
 
 describe('tela de perfil', () => {
   it('mostra todos os campos do usuário', () => {
-    const caption = buildProfileCaption(sampleUser);
+    const caption = buildProfileCaption(screenContext(sampleUser));
     assert.match(caption, /👤 𝐏𝐞𝐫𝐟𝐢𝐥/);
     assert.match(caption, /𝐍𝐨𝐦𝐞: Souzza/);
     assert.match(caption, /𝐔𝐬𝐮𝐚́𝐫𝐢𝐨: @souzza/);
@@ -79,24 +81,24 @@ describe('tela de perfil', () => {
   });
 
   it('mostra o plano Dono quando o plano é dono', () => {
-    const caption = buildProfileCaption({ ...sampleUser, plan: 'dono' });
+    const caption = buildProfileCaption(screenContext({ ...sampleUser, plan: 'dono' }));
     assert.match(caption, /𝐏𝐥𝐚𝐧𝐨: 𝐃𝐨𝐧𝐨/);
   });
 
   it('indica username não definido em vez de mostrar vazio', () => {
-    const caption = buildProfileCaption({ ...sampleUser, username: undefined });
+    const caption = buildProfileCaption(screenContext({ ...sampleUser, username: undefined }));
     assert.match(caption, /𝐔𝐬𝐮𝐚́𝐫𝐢𝐨: 𝑛𝑎̃𝑜 𝑑𝑒𝑓𝑖𝑛𝑖𝑑𝑜/);
     assert.equal(caption.includes('@undefined'), false);
   });
 
   it('não quebra quando não há registro do usuário', () => {
-    const caption = buildProfileCaption(null);
+    const caption = buildProfileCaption(screenContext(null));
     assert.match(caption, /👤 𝐏𝐞𝐫𝐟𝐢𝐥/);
     assert.match(caption, /Não foi possível carregar seus dados/);
   });
 
   it('escapa o nome para impedir injeção de HTML', () => {
-    const caption = buildProfileCaption({ ...sampleUser, firstName: '<script>x</script>' });
+    const caption = buildProfileCaption(screenContext({ ...sampleUser, firstName: '<script>x</script>' }));
     assert.equal(caption.includes('<script>'), false);
     assert.match(caption, /&lt;script&gt;/);
   });
@@ -142,6 +144,24 @@ describe('navegação entre telas', () => {
 });
 
 
+describe('resolveDisplayName', () => {
+  it('prefere o registro persistido', () => {
+    assert.equal(resolveDisplayName(sampleUser, { id: 1, username: 'outro' }), '@souzza');
+  });
+
+  it('usa o Telegram quando não há registro', () => {
+    assert.equal(resolveDisplayName(null, { id: 1, username: 'lizzy' }), '@lizzy');
+    assert.equal(resolveDisplayName(null, { id: 1, first_name: 'Ana' }), 'Ana');
+  });
+
+  it('nunca devolve "@usuario" nem string vazia', () => {
+    assert.equal(resolveDisplayName(null), 'usuário');
+    assert.equal(resolveDisplayName(null, {}), 'usuário');
+    assert.equal(resolveDisplayName(null, { id: 1, username: '  ' }), 'usuário');
+    assert.notEqual(resolveDisplayName(null), '@usuario');
+  });
+});
+
 describe('ajuda e lista de comandos', () => {
   it('a lista de comandos tem start e help, sem duplicatas', () => {
     const names = BOT_COMMANDS.map((c) => c.command);
@@ -170,18 +190,35 @@ describe('ajuda e lista de comandos', () => {
 
 describe('saudação ao voltar para o menu', () => {
   it('usa o @username do usuário registrado', () => {
-    const caption = SCREENS.menu.buildCaption(sampleUser);
+    const caption = SCREENS.menu.buildCaption(screenContext(sampleUser));
     assert.match(caption, /@souzza/);
   });
 
   it('cai para o primeiro nome quando não há username', () => {
-    const caption = SCREENS.menu.buildCaption({ ...sampleUser, username: undefined });
+    const caption = SCREENS.menu.buildCaption(screenContext({ ...sampleUser, username: undefined }));
     assert.match(caption, /Souzza/);
   });
 
-  it('usa rótulo neutro quando não há registro', () => {
-    const caption = SCREENS.menu.buildCaption(null);
+  it('usa rótulo neutro quando não há registro nem dados do Telegram', () => {
+    const caption = SCREENS.menu.buildCaption(screenContext(null));
     assert.match(caption, /usuário/);
+  });
+
+  it('recupera o nome do Telegram quando o registro falta', () => {
+    // Caso do bug relatado: registro ausente nao pode virar placeholder
+    // se o proprio update trouxe o username.
+    const caption = SCREENS.menu.buildCaption(
+      screenContext(null, { id: 99, username: 'souzza', first_name: 'Souzza' }),
+    );
+    assert.match(caption, /@souzza/);
+    assert.equal(caption.includes('usuário'), false);
+  });
+
+  it('recupera o primeiro nome do Telegram quando não há username', () => {
+    const caption = SCREENS.menu.buildCaption(
+      screenContext(null, { id: 99, first_name: 'Souzza' }),
+    );
+    assert.match(caption, /Souzza/);
   });
 
   it('displayNameFor prefere username e cai para o nome', () => {
