@@ -125,7 +125,10 @@ describe('comando /start (sem GIF disponível)', () => {
   it('envia legenda e os quatro botões em UMA única mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
-      config: { startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif') },
+      config: {
+        startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
+        startMediaMode: 'animation',
+      },
       logger: silentLogger,
     });
     const calls = stubTelegram();
@@ -145,7 +148,10 @@ describe('comando /start (sem GIF disponível)', () => {
   it('usa o primeiro nome quando o usuário não tem username', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
-      config: { startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif') },
+      config: {
+        startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
+        startMediaMode: 'animation',
+      },
       logger: silentLogger,
     });
     const calls = stubTelegram();
@@ -173,38 +179,55 @@ describe('comando /start (com GIF disponível)', () => {
     });
   });
 
-  it('envia o GIF com legenda e botões na MESMA mensagem (sendDocument)', async () => {
+  it('envia a mídia em loop (sendAnimation) com legenda e botões na MESMA mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startGifPath: gifPath, startMediaMode: 'animation' },
+      logger: silentLogger,
+    });
     const calls = stubTelegram();
 
     await bot.handleUpdate(startUpdate(3, { id: 9, username: 'gif_user' }));
 
     const sends = calls.filter((call) => call.method !== 'getMe');
     assert.equal(sends.length, 1, 'GIF, legenda e botões devem ir em uma única mensagem');
-    assert.equal(sends[0]?.method, 'sendDocument');
+    assert.equal(sends[0]?.method, 'sendAnimation');
     assert.match(String(sends[0]?.payload.caption), /@gif_user/);
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
 
-  it('envia o arquivo como documento .gif para preservar a extensão', async () => {
+  it('envia o arquivo com nome .gif para o Telegram tratar como animação', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startGifPath: gifPath, startMediaMode: 'animation' },
+      logger: silentLogger,
+    });
     const calls = stubTelegram();
 
     await bot.handleUpdate(startUpdate(4, { id: 11, username: 'gif_nome' }));
 
-    const doc = calls.find((call) => call.method === 'sendDocument')?.payload
-      .document as { filename?: string } | undefined;
-    assert.ok(doc, 'deve enviar o arquivo como documento');
-    // O nome precisa ser .gif; o sendAnimation entregaria .mp4.
-    assert.equal(doc.filename, 'start.gif');
-    assert.equal(
-      calls.some((call) => call.method === 'sendAnimation'),
-      false,
-      'não deve usar sendAnimation, que converte para mp4',
-    );
+    const anim = calls.find((call) => call.method === 'sendAnimation')?.payload
+      .animation as { filename?: string } | undefined;
+    assert.ok(anim, 'deve enviar como animação');
+    assert.equal(anim.filename, 'start.gif');
+  });
+
+  it('permite enviar como documento .gif quando configurado', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerStartCommand(bot, {
+      config: { startGifPath: gifPath, startMediaMode: 'document' },
+      logger: silentLogger,
+    });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(startUpdate(5, { id: 12, username: 'gif_doc' }));
+
+    const sends = calls.filter((call) => call.method !== 'getMe');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0]?.method, 'sendDocument');
+    const doc = sends[0]?.payload.document as { filename?: string } | undefined;
+    assert.equal(doc?.filename, 'start.gif');
   });
 });
 

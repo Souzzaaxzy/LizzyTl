@@ -11,11 +11,16 @@ import * as path from 'node:path';
 
 import { isLogLevel, type LogLevel } from '../core/logger';
 
+/** Forma de envio da mídia do menu. */
+export type StartMediaMode = 'animation' | 'document';
+
 export interface Config {
   /** Token do bot do Telegram (obrigatório). */
   telegramBotToken: string;
   /** Caminho do GIF do menu, relativo à raiz do projeto ou absoluto. */
   startGifPath: string;
+  /** animation = mídia em loop no balão; document = arquivo .gif anexado. */
+  startMediaMode: StartMediaMode;
   /** Nível de log efetivo. */
   logLevel: LogLevel;
   /** Diretório usado para dados locais privados (sessões futuras do WhatsApp). */
@@ -97,6 +102,8 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   }
 
   const rawGifPath = (env.START_GIF_PATH ?? '').trim() || 'assets/start.gif';
+  const rawMediaMode = (env.START_MEDIA_MODE ?? '').trim().toLowerCase();
+  const startMediaMode: StartMediaMode = rawMediaMode === 'document' ? 'document' : 'animation';
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
   const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
@@ -104,6 +111,7 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   return {
     telegramBotToken: rawToken,
     startGifPath: path.isAbsolute(rawGifPath) ? rawGifPath : path.resolve(projectRoot, rawGifPath),
+    startMediaMode,
     logLevel,
     dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),
   };

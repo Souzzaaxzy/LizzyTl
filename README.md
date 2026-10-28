@@ -101,6 +101,11 @@ LOG_LEVEL=info
   com uma mensagem explicando como configurá-lo, sem imprimir o token.
 - `START_GIF_PATH` é opcional e aceita caminho relativo à raiz do projeto ou
   absoluto. O valor padrão é `assets/start.gif`.
+- `START_MEDIA_MODE` controla como a mídia é enviada:
+  - `animation` (padrão): a mídia roda sozinha, em loop infinito, dentro do
+    balão da mensagem. É o comportamento de GIF que o Telegram exibe no chat.
+  - `document`: envia o arquivo como anexo `.gif`, preservando a extensão, mas
+    sem rodar em loop no balão.
 - `LOG_LEVEL` aceita `error`, `warn`, `info` ou `debug`. Valores inválidos
   assumem `info`.
 - `DATA_DIR` é opcional e reserva um diretório para dados locais privados
@@ -108,9 +113,15 @@ LOG_LEVEL=info
 
 ## Localização do GIF
 
-O GIF do menu já está em `assets/start.gif` (540x300, 10 fps, ~2,6 MB), gerado a
-partir do vídeo MP4 fornecido. O caminho é configurável por `START_GIF_PATH`,
-então o GIF pode ser trocado sem alterar a lógica do `/start`.
+O GIF do menu já está em `assets/start.gif` (540x300, 10 fps, loop infinito,
+~2,6 MB), gerado a partir do vídeo MP4 fornecido. O caminho é configurável por
+`START_GIF_PATH`, então o GIF pode ser trocado sem alterar a lógica do `/start`.
+
+Sobre o formato de envio: o Telegram não exibe GIF como GIF solto. Ele
+normaliza a mídia em loop para MP4 internamente (a classe `Animation` da API é
+definida como "GIF ou H.264/MPEG-4 AVC video"). O método `sendAnimation` é o
+que produz a mídia rodando em loop no balão, que é o comportamento desejado.
+Se precisar do arquivo `.gif` como anexo, use `START_MEDIA_MODE=document`.
 
 Se o arquivo não existir, o bot **não encerra e não gera erro sem explicação**:
 ele registra um aviso no log e envia a legenda com os botões, sem o GIF. Ao

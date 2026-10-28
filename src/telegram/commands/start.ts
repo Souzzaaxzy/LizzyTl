@@ -17,7 +17,7 @@ import type { Logger } from '../../core/logger';
 import { buildMainMenuKeyboard, buildStartCaption } from '../menus/main-menu';
 
 export interface StartCommandDeps {
-  config: Pick<Config, 'startGifPath'>;
+  config: Pick<Config, 'startGifPath' | 'startMediaMode'>;
   logger: Logger;
 }
 
@@ -66,23 +66,31 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
       return;
     }
 
+    // O nome do arquivo precisa terminar em .gif para o Telegram tratar como
+    // animacao. Sem ele, o Telegraf usa o padrao "animation.mp4".
+    const media = {
+      source: fs.createReadStream(deps.config.startGifPath),
+      filename: path.basename(deps.config.startGifPath),
+    };
+
     try {
-      // O sendAnimation faz o Telegram converter o GIF em MP4 internamente
-      // (a classe Animation da API e "GIF ou H.264/MPEG-4 AVC"), por isso o
-      // arquivo chegava como .mp4. Enviar como documento preserva o arquivo
-      // .gif, mantem a previa animada no Telegram e aceita legenda + botoes
-      // na mesma mensagem.
-      await ctx.replyWithDocument(
-        {
-          source: fs.createReadStream(deps.config.startGifPath),
-          filename: path.basename(deps.config.startGifPath),
-        },
-        {
+      // sendAnimation e o metodo que faz a midia rodar sozinha, em loop
+      // infinito, dentro do balao (o Telegram normaliza o GIF para MP4, mas
+      // mantem o comportamento de animacao). Legenda e botoes vao na mesma
+      // mensagem. Use START_MEDIA_MODE=document para enviar como arquivo .gif.
+      if (deps.config.startMediaMode === 'document') {
+        await ctx.replyWithDocument(media, {
           caption,
           parse_mode: 'HTML',
           reply_markup: keyboard,
-        },
-      );
+        });
+      } else {
+        await ctx.replyWithAnimation(media, {
+          caption,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        });
+      }
     } catch (error) {
       logger.error('Falha ao enviar o GIF do menu; enviando a mensagem sem o GIF.', error);
       await ctx.reply(caption, {
