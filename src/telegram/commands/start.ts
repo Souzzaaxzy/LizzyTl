@@ -18,7 +18,12 @@ import type { Config } from '../../config/config';
 import type { Logger } from '../../core/logger';
 import type { MediaCache } from '../../data/media-cache';
 import type { UserStore } from '../../data/user-store';
-import { buildMenuCaption, buildMenuKeyboard, resolveDisplayName } from '../screens/screens';
+import {
+  buildMenuCaption,
+  menuKeyboardFor,
+  resolveDisplayName,
+  screenContext,
+} from '../screens/screens';
 
 export interface StartCommandDeps {
   config: Pick<Config, 'startMediaPath'>;
@@ -35,7 +40,19 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     const record = ctx.from ? deps.users.touch(ctx.from) : null;
     // Mesma função usada pelas telas, para a saudação nunca divergir.
     const caption = buildMenuCaption(resolveDisplayName(record, ctx.from));
-    const keyboard = buildMenuKeyboard();
+    // O dono recebe a linha extra do painel; os demais, o menu padrão.
+    const keyboard = menuKeyboardFor({
+      ...screenContext(record, ctx.from),
+      ...(deps.users.isOwner(ctx.from?.id)
+        ? {
+            admin: {
+              stats: deps.users.stats(),
+              recentUsers: deps.users.recent(10),
+              totalUsers: deps.users.count(),
+            },
+          }
+        : {}),
+    });
 
     const mediaPath = deps.config.startMediaPath;
     if (!fs.existsSync(mediaPath)) {

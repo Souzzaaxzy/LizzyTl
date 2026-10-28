@@ -7,12 +7,15 @@ import {
   BOT_COMMANDS,
   CALLBACKS,
   SCREENS,
+  buildAdminStatsCaption,
+  buildAdminUsersCaption,
   buildHelpCaption,
   buildMenuCaption,
   buildMenuKeyboard,
   buildProfileCaption,
   displayNameFor,
   resolveDisplayName,
+  menuKeyboardFor,
   screenContext,
   escapeHtml,
   formatDate,
@@ -111,7 +114,7 @@ describe('tela de perfil', () => {
 describe('navegação entre telas', () => {
   it('toda tela interna tem apenas o botão de voltar', () => {
     for (const id of ['profile', 'settings', 'whatsapp', 'about'] as const) {
-      const keyboard = SCREENS[id].buildKeyboard();
+      const keyboard = SCREENS[id].buildKeyboard(screenContext(sampleUser));
       assert.equal(keyboard.inline_keyboard.length, 1, `${id} deve ter uma linha`);
       assert.equal(keyboard.inline_keyboard[0]?.length, 1, `${id} deve ter um botão`);
       assert.equal(keyboard.inline_keyboard[0]![0]!.text, BACK_BUTTON_LABEL);
@@ -136,7 +139,7 @@ describe('navegação entre telas', () => {
   });
 
   it('o menu tem os quatro botões e o de voltar não aparece nele', () => {
-    const keyboard = SCREENS.menu.buildKeyboard();
+    const keyboard = SCREENS.menu.buildKeyboard(screenContext(sampleUser));
     const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
     assert.equal(callbacks.includes(CALLBACKS.NAV_BACK), false);
     assert.equal(callbacks.length, 4);
@@ -224,5 +227,87 @@ describe('saudação ao voltar para o menu', () => {
   it('displayNameFor prefere username e cai para o nome', () => {
     assert.equal(displayNameFor(sampleUser), '@souzza');
     assert.equal(displayNameFor({ ...sampleUser, username: undefined }), 'Souzza');
+  });
+});
+
+
+describe('painel do dono', () => {
+  const dono = { ...sampleUser, id: 8072791511, plan: 'dono' as const };
+  const adminCtx = (u: UserRecord | null) => ({
+    ...screenContext(u),
+    admin: {
+      stats: {
+        totalUsers: 3,
+        totalAccesses: 12,
+        newToday: 2,
+        activeToday: 1,
+      },
+      recentUsers: [
+        { ...sampleUser, id: 111, username: 'ana', firstName: 'Ana' },
+        { ...sampleUser, id: 8072791511, username: 'souzza', firstName: 'Souzza', plan: 'dono' as const },
+      ],
+      totalUsers: 3,
+    },
+  });
+
+  it('o menu do dono tem a linha do painel além dos quatro botões', () => {
+    const keyboard = menuKeyboardFor(adminCtx(dono));
+    const rows = keyboard.inline_keyboard;
+    assert.equal(rows.length, 3, 'três linhas: dois pares e o painel');
+    const callbacks = rows.flat().map((b) => callbackOf(b));
+    assert.equal(callbacks.length, 5);
+    assert.ok(callbacks.includes(CALLBACKS.ADMIN_STATS));
+  });
+
+  it('o menu de quem não é dono NÃO mostra o painel', () => {
+    const keyboard = menuKeyboardFor(screenContext(sampleUser));
+    const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
+    assert.equal(callbacks.length, 4);
+    assert.equal(callbacks.includes(CALLBACKS.ADMIN_STATS), false);
+  });
+
+  it('sem contexto, cai no menu padrão em vez de quebrar', () => {
+    const keyboard = menuKeyboardFor();
+    assert.equal(keyboard.inline_keyboard.flat().length, 4);
+  });
+
+  it('a legenda de estatísticas mostra os números', () => {
+    const caption = buildAdminStatsCaption(adminCtx(dono));
+    assert.match(caption, /𝐔𝐬𝐮𝐚́𝐫𝐢𝐨𝐬 𝐭𝐨𝐭𝐚𝐢𝐬: 3/);
+    assert.match(caption, /𝐀𝐜𝐞𝐬𝐬𝐨𝐬 𝐭𝐨𝐭𝐚𝐢𝐬: 12/);
+    assert.match(caption, /𝐍𝐨𝐯𝐨𝐬 𝐡𝐨𝐣𝐞: 2/);
+    assert.match(caption, /𝐀𝐭𝐢𝐯𝐨𝐬 𝐡𝐨𝐣𝐞: 1/);
+  });
+
+  it('a lista de usuários marca o dono e mostra o ID', () => {
+    const caption = buildAdminUsersCaption(adminCtx(dono));
+    assert.match(caption, /@souzza — 8072791511/);
+    assert.match(caption, /♛/, 'o dono leva a marca');
+    assert.match(caption, /3 𝐧𝐨 𝐭𝐨𝐭𝐚𝐥/);
+  });
+
+  it('a lista lida com base vazia sem quebrar', () => {
+    const ctx = { ...screenContext(dono), admin: { stats: { totalUsers: 0, totalAccesses: 0, newToday: 0, activeToday: 0 }, recentUsers: [], totalUsers: 0 } };
+    assert.match(buildAdminUsersCaption(ctx), /Nenhum usuário registrado/);
+  });
+
+  it('sem dados de admin, as legendas não quebram', () => {
+    assert.match(buildAdminStatsCaption(screenContext(dono)), /indisponíveis/);
+    assert.match(buildAdminUsersCaption(screenContext(dono)), /indisponíveis/);
+  });
+
+  it('as telas de admin são marcadas como restritas ao dono', () => {
+    assert.equal(SCREENS.adminStats.ownerOnly, true);
+    assert.equal(SCREENS.adminUsers.ownerOnly, true);
+  });
+
+  it('telas comuns NÃO são restritas', () => {
+    assert.equal(SCREENS.profile.ownerOnly, undefined);
+    assert.equal(SCREENS.menu.ownerOnly, undefined);
+  });
+
+  it('os callbacks de admin levam às telas de admin', () => {
+    assert.equal(screenForCallback(CALLBACKS.ADMIN_STATS)?.id, 'adminStats');
+    assert.equal(screenForCallback(CALLBACKS.ADMIN_USERS)?.id, 'adminUsers');
   });
 });

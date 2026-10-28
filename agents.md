@@ -93,6 +93,12 @@ exibir como animação, e nessa reencodagem o loop se perde.
 - Novos comandos: adicione em `BOT_COMMANDS` (`screens.ts`), crie o módulo em
   `commands/` e registre no `index.ts`. A lista de `BOT_COMMANDS` alimenta o
   `/help` e o `setMyCommands`, então não duplique descrições.
+- Telas restritas: marque `ownerOnly: true` na tela. O handler de callbacks
+  confere `users.isOwner(ctx.from.id)` antes de renderizar. **Nunca** confie no
+  payload do callback para autorização — ele vem do cliente e pode ser forjado.
+- Ao criar um prefixo novo de callback, adicione-o ao filtro `bot.action(/^..._/)`
+  em `callback-handler.ts`. Sem isso o callback cai no fallback e a tela nunca
+  abre (foi um bug real ao criar o painel).
 - **A ordem de registro no `index.ts` importa**: comandos e callbacks primeiro,
   `registerMessageHandler` por último. Ele é o fallback e só deve tratar o que
   ninguém mais tratou.

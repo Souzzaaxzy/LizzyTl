@@ -27,6 +27,19 @@ export interface UserRecord {
   accessCount: number;
 }
 
+export interface StoreStats {
+  /** Total de usuários registrados. */
+  totalUsers: number;
+  /** Soma dos acessos de todos os usuários. */
+  totalAccesses: number;
+  /** Usuários cujo primeiro acesso foi hoje. */
+  newToday: number;
+  /** Usuários cujo último acesso foi hoje. */
+  activeToday: number;
+  /** Quando o dono entrou pela primeira vez, se já houver registro. */
+  ownerFirstSeenAt?: string;
+}
+
 export interface TelegramUserLike {
   id: number;
   username?: string;
@@ -125,6 +138,44 @@ export class UserStore {
 
   get(id: number): UserRecord | undefined {
     return this.users[String(id)];
+  }
+
+  /** Total de registros. */
+  count(): number {
+    return Object.keys(this.users).length;
+  }
+
+  /**
+   * Lista os usuários mais recentes primeiro. `limit` evita montar uma
+   * mensagem grande demais para o Telegram quando a base crescer.
+   */
+  recent(limit = 10): UserRecord[] {
+    return Object.values(this.users)
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))
+      .slice(0, limit);
+  }
+
+  /** Estatísticas gerais da base. */
+  stats(): StoreStats {
+    const all = Object.values(this.users);
+    const today = new Date().toISOString().slice(0, 10);
+    const owner = this.ownerId !== undefined ? this.users[String(this.ownerId)] : undefined;
+
+    return {
+      totalUsers: all.length,
+      totalAccesses: all.reduce((sum, u) => sum + u.accessCount, 0),
+      newToday: all.filter((u) => u.firstSeenAt.slice(0, 10) === today).length,
+      activeToday: all.filter((u) => u.lastSeenAt.slice(0, 10) === today).length,
+      ownerFirstSeenAt: owner?.firstSeenAt,
+    };
+  }
+
+  /**
+   * Verdadeiro apenas para o dono. Usado como checagem de autorização a cada
+   * ação de admin, no servidor: nunca confie em nada vindo do cliente.
+   */
+  isOwner(id: number | undefined): boolean {
+    return id !== undefined && this.ownerId !== undefined && id === this.ownerId;
   }
 
   private planFor(id: number): Plan {

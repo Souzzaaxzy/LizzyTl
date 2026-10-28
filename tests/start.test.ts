@@ -432,3 +432,74 @@ describe('publicação dos comandos no Telegram', () => {
     proto.callApi = original;
   });
 });
+
+
+describe('segurança do painel do dono', () => {
+  const OWNER_ID = 8072791511;
+
+  function adminBot() {
+    const users = makeStore(OWNER_ID);
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users });
+    return { bot, users };
+  }
+
+  it('o dono abre as estatísticas', async () => {
+    const { bot } = adminBot();
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(70, CALLBACKS.ADMIN_STATS, OWNER_ID));
+
+    const edit = calls.find((c) => c.method === 'editMessageCaption');
+    assert.ok(edit, 'o dono deve conseguir abrir');
+    assert.match(String(edit?.payload.caption), /𝐄𝐬𝐭𝐚𝐭í𝐬𝐭𝐢𝐜𝐚𝐬/);
+  });
+
+  it('um usuário comum NÃO abre o painel mesmo forjando o callback', async () => {
+    const { bot } = adminBot();
+    const calls = stubTelegram();
+
+    // 999 nao e o dono, mas envia o callback de admin de proposito.
+    await bot.handleUpdate(callbackUpdate(71, CALLBACKS.ADMIN_STATS, 999));
+
+    assert.equal(
+      calls.some((c) => c.method === 'editMessageCaption'),
+      false,
+      'não pode renderizar a tela restrita',
+    );
+    const answer = calls.find((c) => c.method === 'answerCallbackQuery');
+    assert.equal(String(answer?.payload.text), 'Acesso restrito.');
+  });
+
+  it('um usuário comum NÃO abre a lista de usuários', async () => {
+    const { bot } = adminBot();
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(72, CALLBACKS.ADMIN_USERS, 999));
+
+    assert.equal(calls.some((c) => c.method === 'editMessageCaption'), false);
+    const answer = calls.find((c) => c.method === 'answerCallbackQuery');
+    assert.equal(String(answer?.payload.text), 'Acesso restrito.');
+  });
+
+  it('a resposta de acesso restrito não vaza dados de usuários', async () => {
+    const { bot, users } = adminBot();
+    users.touch({ id: 555, username: 'vitima', first_name: 'V' });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(73, CALLBACKS.ADMIN_USERS, 999));
+
+    const texto = JSON.stringify(calls.map((c) => c.payload));
+    assert.equal(texto.includes('vitima'), false, 'não pode vazar nome de usuário');
+    assert.equal(texto.includes('555'), false, 'não pode vazar ID de usuário');
+  });
+
+  it('telas comuns seguem abertas para qualquer usuário', async () => {
+    const { bot } = adminBot();
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(callbackUpdate(74, CALLBACKS.MENU_PROFILE, 999));
+
+    assert.ok(calls.some((c) => c.method === 'editMessageCaption'), 'o perfil é público');
+  });
+});

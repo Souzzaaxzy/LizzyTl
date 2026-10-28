@@ -9,7 +9,7 @@
 import { Markup } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
-import type { Plan, TelegramUserLike, UserRecord } from '../../data/user-store';
+import type { Plan, StoreStats, TelegramUserLike, UserRecord } from '../../data/user-store';
 
 /** Identificadores estáveis de callback. Nunca reaproveite um valor antigo. */
 export const CALLBACKS = {
@@ -18,11 +18,21 @@ export const CALLBACKS = {
   MENU_WHATSAPP: 'menu_whatsapp',
   MENU_ABOUT: 'menu_about',
   NAV_BACK: 'nav_back',
+  ADMIN_STATS: 'admin_stats',
+  ADMIN_USERS: 'admin_users',
 } as const;
 
 export type CallbackId = (typeof CALLBACKS)[keyof typeof CALLBACKS];
 
-export type ScreenId = 'menu' | 'profile' | 'settings' | 'whatsapp' | 'about';
+export type ScreenId =
+  | 'menu'
+  | 'profile'
+  | 'settings'
+  | 'whatsapp'
+  | 'about'
+  | 'admin'
+  | 'adminStats'
+  | 'adminUsers';
 
 /**
  * Dados disponíveis para montar uma tela.
@@ -36,12 +46,26 @@ export interface ScreenContext {
   telegramUser?: TelegramUserLike;
   /** Nome já resolvido para exibição. */
   displayName: string;
+  /**
+   * Dados de administração. Só é preenchido quando quem navega é o dono, e
+   * quem decide isso é o servidor — nunca o payload do callback.
+   */
+  admin?: {
+    stats: StoreStats;
+    recentUsers: UserRecord[];
+    totalUsers: number;
+  };
 }
 
 export interface Screen {
   id: ScreenId;
   buildCaption(context: ScreenContext): string;
-  buildKeyboard(): InlineKeyboardMarkup;
+  buildKeyboard(context: ScreenContext): InlineKeyboardMarkup;
+  /**
+   * Quando verdadeiro, a tela só pode ser aberta pelo dono. O handler de
+   * callbacks confere isso no servidor antes de renderizar.
+   */
+  ownerOnly?: boolean;
 }
 
 /** Nome oficial do bot. Não substitua por nomes genéricos. */
@@ -90,6 +114,11 @@ export function backKeyboard(): InlineKeyboardMarkup {
   ]).reply_markup;
 }
 
+/** Adapta um teclado fixo para a assinatura que recebe contexto. */
+function fixedKeyboard(keyboard: () => InlineKeyboardMarkup): (context: ScreenContext) => InlineKeyboardMarkup {
+  return () => keyboard();
+}
+
 /** Formata uma data ISO como dd/mm/aaaa, sem depender de locale do sistema. */
 export function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -132,6 +161,34 @@ export function buildMenuKeyboard(): InlineKeyboardMarkup {
       Markup.button.callback('ℹ️ Sobre a Lizzy', CALLBACKS.MENU_ABOUT),
     ],
   ]).reply_markup;
+}
+
+/**
+ * Teclado do menu para o dono: os mesmos quatro botões mais a linha do painel.
+ *
+ * Esconder o botão é conveniência, não segurança — quem não é dono não
+ * consegue abrir o painel mesmo forjando o callback, porque a autorização é
+ * reconferida no servidor a cada ação.
+ */
+export function buildOwnerMenuKeyboard(): InlineKeyboardMarkup {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('👤 Perfil', CALLBACKS.MENU_PROFILE),
+      Markup.button.callback('⚙️ Configurações', CALLBACKS.MENU_SETTINGS),
+    ],
+    [
+      Markup.button.callback('📱 WhatsApp', CALLBACKS.MENU_WHATSAPP),
+      Markup.button.callback('ℹ️ Sobre a Lizzy', CALLBACKS.MENU_ABOUT),
+    ],
+    [Markup.button.callback('🛡️ Painel do dono', CALLBACKS.ADMIN_STATS)],
+  ]).reply_markup;
+}
+
+/**
+ * Teclado do menu conforme quem está navegando: o dono ganha a linha do painel.
+ */
+export function menuKeyboardFor(context?: ScreenContext): InlineKeyboardMarkup {
+  return context?.admin ? buildOwnerMenuKeyboard() : buildMenuKeyboard();
 }
 
 /**
@@ -194,18 +251,83 @@ export function buildProfileCaption(context: ScreenContext): string {
   ].join('\n');
 }
 
+/**
+ * Teclado do painel do dono. Os dois botões são as ações disponíveis; o
+ * botão de voltar fica na linha de baixo.
+ */
+export function adminKeyboard(): InlineKeyboardMarkup {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📊 Estatísticas', CALLBACKS.ADMIN_STATS),
+      Markup.button.callback('👥 Usuários', CALLBACKS.ADMIN_USERS),
+    ],
+    [Markup.button.callback(BACK_BUTTON_LABEL, CALLBACKS.NAV_BACK)],
+  ]).reply_markup;
+}
+
+/** Teclado das telas internas do painel: só o botão de voltar. */
+export function adminBackKeyboard(): InlineKeyboardMarkup {
+  return backKeyboard();
+}
+
+/** Legenda da tela de estatísticas do painel. */
+export function buildAdminStatsCaption(context: ScreenContext): string {
+  const admin = context.admin;
+  if (!admin) {
+    return ['📊 𝐄𝐬𝐭𝐚𝐭í𝐬𝐭𝐢𝐜𝐚𝐬', '', 'Dados indisponíveis.'].join('\n');
+  }
+  const { stats } = admin;
+  return [
+    '📊 𝐄𝐬𝐭𝐚𝐭í𝐬𝐭𝐢𝐜𝐚𝐬',
+    '',
+    `♛ 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨𝐬 𝐭𝐨𝐭𝐚𝐢𝐬: ${stats.totalUsers}`,
+    `✦ 𝐀𝐜𝐞𝐬𝐬𝐨𝐬 𝐭𝐨𝐭𝐚𝐢𝐬: ${stats.totalAccesses}`,
+    '',
+    `♛ 𝐍𝐨𝐯𝐨𝐬 𝐡𝐨𝐣𝐞: ${stats.newToday}`,
+    `✦ 𝐀𝐭𝐢𝐯𝐨𝐬 𝐡𝐨𝐣𝐞: ${stats.activeToday}`,
+  ].join('\n');
+}
+
+/**
+ * Legenda da lista de usuários recentes. O Telegram limita a legenda a 1024
+ * caracteres, então a lista é curta por padrão.
+ */
+export function buildAdminUsersCaption(context: ScreenContext): string {
+  const admin = context.admin;
+  if (!admin) {
+    return ['👥 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨𝐬', '', 'Dados indisponíveis.'].join('\n');
+  }
+  if (admin.recentUsers.length === 0) {
+    return ['👥 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨𝐬', '', 'Nenhum usuário registrado ainda.'].join('\n');
+  }
+
+  const linhas = admin.recentUsers.map((u) => {
+    const nome = u.username ? `@${u.username}` : u.firstName;
+    const marca = u.plan === 'dono' ? ' ♛' : '';
+    return `✦ ${escapeHtml(nome)} — ${u.id}${marca}`;
+  });
+
+  return [
+    `👥 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨𝐬 (${admin.totalUsers} 𝐧𝐨 𝐭𝐨𝐭𝐚𝐥)`,
+    '',
+    ...linhas,
+    '',
+    `♛ 𝐄𝐱𝐢𝐛𝐢𝐧𝐝𝐨 𝐨𝐬 ${admin.recentUsers.length} 𝐦𝐚𝐢𝐬 𝐫𝐞𝐜𝐞𝐧𝐭𝐞𝐬.`,
+  ].join('\n');
+}
+
 /** As telas internas compartilham o botão de voltar. */
 export const SCREENS: Record<ScreenId, Screen> = {
   menu: {
     id: 'menu',
     // Usa o nome resolvido do contexto: registro persistido ou dados do Telegram.
     buildCaption: (context) => buildMenuCaption(context.displayName),
-    buildKeyboard: buildMenuKeyboard,
+    buildKeyboard: menuKeyboardFor,
   },
   profile: {
     id: 'profile',
     buildCaption: buildProfileCaption,
-    buildKeyboard: backKeyboard,
+    buildKeyboard: fixedKeyboard(backKeyboard),
   },
   settings: {
     id: 'settings',
@@ -215,7 +337,7 @@ export const SCREENS: Record<ScreenId, Screen> = {
         '',
         'A seção de configurações será implementada posteriormente.',
       ].join('\n'),
-    buildKeyboard: backKeyboard,
+    buildKeyboard: fixedKeyboard(backKeyboard),
   },
   whatsapp: {
     id: 'whatsapp',
@@ -226,7 +348,7 @@ export const SCREENS: Record<ScreenId, Screen> = {
         'Módulo em preparação.',
         'A integração com o WhatsApp ainda não foi implementada e nenhuma conexão real foi validada até o momento.',
       ].join('\n'),
-    buildKeyboard: backKeyboard,
+    buildKeyboard: fixedKeyboard(backKeyboard),
   },
   about: {
     id: 'about',
@@ -236,7 +358,30 @@ export const SCREENS: Record<ScreenId, Screen> = {
         '',
         'Bot em desenvolvimento, com suporte ao Telegram e integração com WhatsApp planejada.',
       ].join('\n'),
-    buildKeyboard: backKeyboard,
+    buildKeyboard: fixedKeyboard(backKeyboard),
+  },
+  admin: {
+    id: 'admin',
+    buildCaption: (context) =>
+      [
+        '🛡️ 𝐏𝐚𝐢𝐧𝐞𝐥 𝐝𝐨 𝐝𝐨𝐧𝐨',
+        '',
+        `♛ 𝐎𝐥𝐚́, ${escapeHtml(context.displayName)}.`,
+        '✦ 𝐀𝐜𝐞𝐬𝐬𝐨 𝐫𝐞𝐬𝐭𝐫𝐢𝐭𝐨 𝐚𝐨 𝐩𝐫𝐨𝐩𝐫𝐢𝐞𝐭𝐚́𝐫𝐢𝐨 𝐝𝐚 𝐋𝐢𝐳𝐳𝐲.',
+      ].join('\n'),
+    buildKeyboard: adminKeyboard,
+  },
+  adminStats: {
+    id: 'adminStats',
+    buildCaption: buildAdminStatsCaption,
+    buildKeyboard: fixedKeyboard(adminBackKeyboard),
+    ownerOnly: true,
+  },
+  adminUsers: {
+    id: 'adminUsers',
+    buildCaption: buildAdminUsersCaption,
+    buildKeyboard: fixedKeyboard(adminBackKeyboard),
+    ownerOnly: true,
   },
 };
 
@@ -251,6 +396,10 @@ export function screenForCallback(callbackData: string): Screen | undefined {
       return SCREENS.whatsapp;
     case CALLBACKS.MENU_ABOUT:
       return SCREENS.about;
+    case CALLBACKS.ADMIN_STATS:
+      return SCREENS.adminStats;
+    case CALLBACKS.ADMIN_USERS:
+      return SCREENS.adminUsers;
     case CALLBACKS.NAV_BACK:
       return SCREENS.menu;
     default:

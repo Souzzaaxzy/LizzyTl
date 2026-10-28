@@ -18,6 +18,7 @@ funcionalidade foi implementada nesta fase.
 - [Configuração do token](#configuração-do-token)
 - [Localização da mídia](#localização-da-mídia)
 - [Comandos](#comandos)
+- [Painel do dono](#painel-do-dono)
 - [Perfil](#perfil)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
 - [Como executar os testes](#como-executar-os-testes)
@@ -161,6 +162,31 @@ normalmente e apenas avisa no log.
 Qualquer outra mensagem recebe uma resposta apontando para o menu, em vez de
 silêncio. Isso evita a impressão de bot quebrado quando alguém digita algo
 inesperado.
+
+## Painel do dono
+
+O dono vê uma linha extra no menu, **🛡️ Painel do dono**, com dois itens:
+
+| Tela | O que mostra |
+| --- | --- |
+| 📊 Estatísticas | Usuários totais, acessos totais, novos hoje e ativos hoje |
+| 👥 Usuários | Os 10 usuários mais recentes, com nome, ID e marca do dono |
+
+Só existe um dono: quem tem o ID em `DEFAULT_OWNER_TELEGRAM_ID`
+(`src/config/config.ts`). Não há promoção de outros usuários.
+
+### Segurança
+
+A autorização é conferida **no servidor, a cada ação**. O botão do painel
+simplesmente não aparece para quem não é dono, mas isso é conveniência, não
+proteção: esconder um botão não impede ninguém de enviar um callback forjado com
+o mesmo identificador.
+
+O que protege de verdade é a checagem em `callback-handler.ts`, antes de
+renderizar qualquer tela marcada como `ownerOnly`. A decisão vem do
+`UserStore` (servidor), nunca do payload do callback, que é dado enviado pelo
+cliente. Uma tentativa indevida é registrada no log e respondida com
+"Acesso restrito.", sem vazar nenhum dado.
 
 ## Perfil
 

@@ -14,7 +14,12 @@ import type { Context, Telegraf } from 'telegraf';
 
 import type { Logger } from '../../core/logger';
 import type { UserStore } from '../../data/user-store';
-import { screenContext, screenForCallback, type Screen } from '../screens/screens';
+import {
+  screenContext,
+  screenForCallback,
+  type Screen,
+  type ScreenContext,
+} from '../screens/screens';
 
 export interface CallbackHandlerDeps {
   logger: Logger;
@@ -36,6 +41,29 @@ export function extractCallbackData(query: unknown): string {
 }
 
 /**
+ * Monta o contexto de uma tela. O bloco `admin` só é preenchido para o dono,
+ * e a decisão vem do `UserStore` (servidor), nunca do payload do callback.
+ */
+function contextFor(ctx: Context, deps: CallbackHandlerDeps): ScreenContext {
+  const userId = ctx.from?.id;
+  const user = userId !== undefined ? deps.users.get(userId) ?? null : null;
+  const base = screenContext(user, ctx.from);
+
+  if (!deps.users.isOwner(userId)) {
+    return base;
+  }
+
+  return {
+    ...base,
+    admin: {
+      stats: deps.users.stats(),
+      recentUsers: deps.users.recent(10),
+      totalUsers: deps.users.count(),
+    },
+  };
+}
+
+/**
  * Renderiza a tela editando a mensagem que contém os botões.
  *
  * Quando a edição falha (por exemplo, a mensagem é antiga demais e o Telegram
@@ -46,12 +74,9 @@ async function renderScreen(
   screen: Screen,
   deps: CallbackHandlerDeps,
 ): Promise<void> {
-  const userId = ctx.from?.id;
-  const user = userId !== undefined ? deps.users.get(userId) ?? null : null;
-  // Passa também os dados do Telegram: se o registro faltar, a tela ainda
-  // consegue mostrar o nome real em vez de um placeholder.
-  const caption = screen.buildCaption(screenContext(user, ctx.from));
-  const keyboard = screen.buildKeyboard();
+  const context = contextFor(ctx, deps);
+  const caption = screen.buildCaption(context);
+  const keyboard = screen.buildKeyboard(context);
 
   try {
     await ctx.editMessageCaption(caption, {
@@ -67,13 +92,25 @@ async function renderScreen(
 export function registerCallbackHandler(bot: Telegraf, deps: CallbackHandlerDeps): void {
   const logger = deps.logger.child('callbacks');
 
-  bot.action(/^menu_|^nav_/, async (ctx) => {
+  // Prefixos conhecidos. Um prefixo novo precisa ser adicionado aqui, senão o
+  // callback cai no fallback e a tela nunca abre.
+  bot.action(/^(menu|nav|admin)_/, async (ctx) => {
     const callbackData = extractCallbackData(ctx.callbackQuery);
     const screen = screenForCallback(callbackData);
 
     if (screen === undefined) {
       logger.warn(`Callback desconhecido recebido: "${callbackData}"`);
       await ctx.answerCbQuery('Opção indisponível no momento.');
+      return;
+    }
+
+    // Autorização no servidor: esconder o botão não protege nada, porque
+    // qualquer pessoa pode enviar um callback forjado com o mesmo data.
+    if (screen.ownerOnly && !deps.users.isOwner(ctx.from?.id)) {
+      logger.warn(
+        `Tentativa de abrir tela restrita "${screen.id}" pelo usuário ${ctx.from?.id ?? 'desconhecido'}.`,
+      );
+      await ctx.answerCbQuery('Acesso restrito.');
       return;
     }
 
