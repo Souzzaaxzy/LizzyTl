@@ -138,7 +138,9 @@ describe('loadConfig', () => {
       assert.fail('deveria ter lançado ConfigError');
     } catch (error) {
       assert.ok(error instanceof ConfigError);
-      assert.match(error.message, /cd .*project/);
+      // Deve orientar com o caminho do projeto, sem depender do nome da pasta.
+      assert.match(error.message, /cd \S+/);
+      assert.ok(error.message.includes(PROJECT_ROOT), 'deve mostrar o caminho real');
       assert.match(error.message, /TELEGRAM_BOT_TOKEN=<numero-do-bot>:<segredo>/);
     }
   });

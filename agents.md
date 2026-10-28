@@ -79,7 +79,25 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - O código de pareamento vai para o chat de quem pediu, via
   `onPairingCode(userId, code)`. Nunca para outro usuário.
 
-## Instalação do fork: use o tarball, não "github:"
+## Instalação: `npm run setup`, nunca `npm install`
+
+O npm 11.20+ bloqueia quatro categorias de dependência que não vêm do registro
+oficial: `git`, `remote`, `file` e `directory` (erros `EALLOWGIT`,
+`EALLOWREMOTE`, etc.). Como o fork **não está publicado no npm**, ele cai
+inevitavelmente em uma delas.
+
+Por isso existe o script `setup` no `package.json`:
+
+```
+npm run setup   # = npm install --allow-remote=all --allow-git=all
+```
+
+A flag fica no `package.json` (versionado, visível na revisão) em vez de num
+`.npmrc`, que seria um arquivo de configuração do npm — mudança que exige
+consentimento explícito, por mexer em política de instalação da máquina.
+
+**Documente `npm run setup` como o comando oficial de instalação.** Se alguém
+rodar `npm install` puro num npm novo, vai falhar.
 
 O npm 11.20+ **bloqueia dependências do tipo git** por padrão
 (`allow-git = "none"`), com o erro `EALLOWGIT`. Além disso, uma referência
