@@ -13,15 +13,15 @@ import type { Context, Telegraf } from 'telegraf';
 
 import type { Logger } from '../../core/logger.js';
 import type { UserStore } from '../../data/user-store.js';
-import type { WhatsAppClient } from '../../whatsapp/client.js';
 import { normalizeWhatsappNumber } from '../../whatsapp/client.js';
+import type { WhatsAppManager } from '../../whatsapp/manager.js';
 import { buildMenuKeyboard } from '../screens/screens.js';
 import type { PendingActions } from '../state/pending-action.js';
 
 export interface MessageHandlerDeps {
   logger: Logger;
   users: UserStore;
-  whatsapp: WhatsAppClient;
+  whatsapp: WhatsAppManager;
   pendingActions: PendingActions;
 }
 
@@ -44,7 +44,8 @@ export function registerMessageHandler(bot: Telegraf, deps: MessageHandlerDeps):
    */
   const tratarNumeroPendente = async (ctx: Context): Promise<boolean> => {
     const userId = ctx.from?.id;
-    if (userId === undefined || !deps.users.isOwner(userId)) {
+    // Qualquer usuário pode conectar o próprio número: o bot é público.
+    if (userId === undefined) {
       return false;
     }
     if (deps.pendingActions.peek(userId) !== 'whatsapp_number') {
@@ -79,7 +80,13 @@ export function registerMessageHandler(bot: Telegraf, deps: MessageHandlerDeps):
       .catch(() => undefined);
 
     // Não espera: o código chega pelo callback, assim que o WhatsApp responder.
-    void deps.whatsapp.connectNumber(numero).catch((error: unknown) => {
+    void deps.whatsapp.connect(userId, numero).then((resultado) => {
+      if (!resultado.ok && resultado.message) {
+        // Recusa clara em vez de silêncio: o usuário precisa saber o motivo.
+        return ctx.reply(resultado.message, { parse_mode: 'HTML' }).catch(() => undefined);
+      }
+      return undefined;
+    }).catch((error: unknown) => {
       logger.error('Falha ao conectar o WhatsApp com o número informado.', error);
     });
     return true;

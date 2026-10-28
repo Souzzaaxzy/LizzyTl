@@ -16,7 +16,7 @@ import * as fs from 'node:fs';
 
 import type { Config } from '../config/config.js';
 import type { Logger } from '../core/logger.js';
-import type { WhatsappConfigStore } from '../data/whatsapp-config-store.js';
+import type { WhatsappSession } from '../data/whatsapp-session-store.js';
 import {
   loadBaileys,
   type BaileysConnectionUpdate,
@@ -45,13 +45,10 @@ export interface WhatsAppStatus {
 }
 
 export interface WhatsAppClientDeps {
-  config: Pick<Config, 'whatsappPairingCode' | 'whatsappAuthDir'>;
+  config: Pick<Config, 'whatsappPairingCode'>;
   logger: Logger;
-  /**
-   * Onde o número fica guardado. O dono informa pelo Telegram, então o valor
-   * chega em tempo de execução, não na configuração estática.
-   */
-  store: Pick<WhatsappConfigStore, 'getNumber' | 'setNumber' | 'clear'>;
+  /** A sessão deste cliente: número e onde ficam as credenciais. */
+  session: WhatsappSession;
   /** Injetável para testar sem abrir conexão real. */
   createSocket?: BaileysMakeSocket;
   /** Injetável para testar sem ler o pacote do disco. */
@@ -101,7 +98,7 @@ export class WhatsAppClient {
   private readonly logger: Logger;
   private readonly createSocket: BaileysMakeSocket | undefined;
   private readonly loadModule: () => Promise<BaileysModule>;
-  private readonly store: WhatsAppClientDeps['store'];
+  private readonly session: WhatsappSession;
   private readonly onPairingCode: ((code: string) => void) | undefined;
   private socket: BaileysSocket | null = null;
   private status: WhatsAppStatus = { state: 'desligado', summary: 'Desligado.' };
@@ -117,7 +114,7 @@ export class WhatsAppClient {
     this.logger = deps.logger.child('whatsapp');
     this.createSocket = deps.createSocket;
     this.loadModule = deps.loadModule ?? loadBaileys;
-    this.store = deps.store;
+    this.session = deps.session;
     this.onPairingCode = deps.onPairingCode;
   }
 
@@ -131,6 +128,11 @@ export class WhatsAppClient {
     return this.status.state === 'conectado';
   }
 
+  /** Número da conexão atual, quando já houve um. Usado para gravar a sessão. */
+  numeroConectado(): string | undefined {
+    return this.numeroAtual;
+  }
+
   private setStatus(state: WhatsAppState, summary: string): void {
     this.status = { state, summary };
   }
@@ -140,7 +142,7 @@ export class WhatsAppClient {
    * dono informa pelo Telegram quando quiser.
    */
   async start(): Promise<void> {
-    const numero = this.store.getNumber();
+    const numero = this.session.number;
     if (numero === undefined) {
       this.setStatus(
         'desligado',
@@ -153,38 +155,39 @@ export class WhatsAppClient {
   }
 
   /**
-   * Conecta usando um número informado agora. Guarda antes de tentar, para o
-   * valor sobreviver a um reinício mesmo se a conexão falhar.
+   * Conecta usando um número informado agora.
+   *
+   * Devolve true quando aceitou o número, para o chamador saber se deve
+   * guardar a sessão. A validação vem antes de qualquer conexão.
    */
-  async connectNumber(rawNumber: string): Promise<void> {
+  async connectNumber(rawNumber: string): Promise<boolean> {
     const numero = normalizeWhatsappNumber(rawNumber);
     if (numero.length < 10) {
       this.setStatus(
         'erro',
         'Número inválido: informe com código do país, só dígitos. Ex.: 5511999999999',
       );
-      return;
+      return false;
     }
 
-    this.store.setNumber(numero);
     // Sessão antiga de outro número só atrapalha: o pareamento é por número.
     this.apagarSessao();
     await this.connectWith(numero);
+    return true;
   }
 
   /** Remove a sessão autenticada, forçando um pareamento novo. */
   apagarSessao(): void {
     try {
-      fs.rmSync(this.config.whatsappAuthDir, { recursive: true, force: true });
+      fs.rmSync(this.session.authDir, { recursive: true, force: true });
     } catch (error) {
       this.logger.warn('Falha ao apagar a sessão do WhatsApp.', error);
     }
   }
 
-  /** Esquece o número e a sessão, voltando ao estado desligado. */
+  /** Encerra a conexão e apaga as credenciais, voltando ao estado desligado. */
   desconectar(): void {
     this.stop();
-    this.store.clear();
     this.apagarSessao();
     this.setStatus(
       'desligado',
@@ -214,9 +217,9 @@ export class WhatsAppClient {
     this.setStatus('conectando', 'Conectando...');
 
     try {
-      fs.mkdirSync(this.config.whatsappAuthDir, { recursive: true, mode: 0o700 });
+      fs.mkdirSync(this.session.authDir, { recursive: true, mode: 0o700 });
       const modulo = await this.loadModule();
-      const { state, saveCreds } = await modulo.useMultiFileAuthState(this.config.whatsappAuthDir);
+      const { state, saveCreds } = await modulo.useMultiFileAuthState(this.session.authDir);
 
       const criar: BaileysMakeSocket = this.createSocket ?? modulo.makeWASocket;
       const socket = criar({

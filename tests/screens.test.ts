@@ -112,8 +112,10 @@ describe('tela de perfil', () => {
 });
 
 describe('navegação entre telas', () => {
-  it('toda tela interna tem apenas o botão de voltar', () => {
-    for (const id of ['profile', 'settings', 'whatsapp', 'about'] as const) {
+  it('toda tela interna tem o botão de voltar', () => {
+    // A tela do WhatsApp é a exceção: ela tem as ações de conectar/desconectar,
+    // que são o propósito dela. As demais só têm voltar.
+    for (const id of ['profile', 'settings', 'about'] as const) {
       const keyboard = SCREENS[id].buildKeyboard(screenContext(sampleUser));
       assert.equal(keyboard.inline_keyboard.length, 1, `${id} deve ter uma linha`);
       assert.equal(keyboard.inline_keyboard[0]?.length, 1, `${id} deve ter um botão`);

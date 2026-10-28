@@ -18,7 +18,7 @@ import type { Config } from '../../config/config.js';
 import type { Logger } from '../../core/logger.js';
 import type { MediaCache } from '../../data/media-cache.js';
 import type { UserStore } from '../../data/user-store.js';
-import type { WhatsAppClient } from '../../whatsapp/client.js';
+import type { WhatsAppManager } from '../../whatsapp/manager.js';
 import {
   buildMenuCaption,
   menuKeyboardFor,
@@ -31,8 +31,8 @@ export interface StartCommandDeps {
   logger: Logger;
   users: UserStore;
   mediaCache: MediaCache;
-  /** Usado para montar o menu com o estado real do WhatsApp. */
-  whatsapp: WhatsAppClient;
+  /** Usado para montar o menu com o estado real do WhatsApp do usuário. */
+  whatsapp: WhatsAppManager;
 }
 
 export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): void {
@@ -46,7 +46,7 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     // O dono recebe a linha extra do painel; os demais, o menu padrão.
     const keyboard = menuKeyboardFor({
       ...screenContext(record, ctx.from),
-      whatsapp: deps.whatsapp.getStatus(),
+      whatsapp: ctx.from ? deps.whatsapp.getStatus(ctx.from.id) : undefined,
       ...(deps.users.isOwner(ctx.from?.id)
         ? {
             admin: {

@@ -14,16 +14,17 @@ import {
   type WhatsAppSocketLike,
 } from '../src/whatsapp/client.js';
 import type { BaileysModule } from '../src/whatsapp/baileys-types.js';
+import { WhatsAppManager } from '../src/whatsapp/manager.js';
 
 const silentLogger = createLogger('error');
 
-/** Store em memória: o número é informado em tempo de execução. */
-function fakeStore(inicial?: string) {
-  let numero = inicial;
+/** Sessão em memória: o número pertence a um usuário específico. */
+function fakeSession(userId = 42, number?: string) {
   return {
-    getNumber: () => numero,
-    setNumber: (n: string) => { numero = n; },
-    clear: () => { numero = undefined; },
+    userId,
+    number,
+    authDir: `/tmp/lizzy-wa-auth-${userId}`,
+    createdAt: undefined,
   };
 }
 
@@ -68,19 +69,17 @@ function makeClient(numeroInicial: string | null = '5511999999999') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-wa-'));
   const { socket, chamadas } = fakeSocket();
   // null significa "sem número": undefined acionaria o valor padrão do parâmetro.
-  const store = fakeStore(numeroInicial ?? undefined);
+  const session = fakeSession(42, numeroInicial ?? undefined);
+  session.authDir = dir;
   const codigos: string[] = [];
   const client = new WhatsAppClient({
-    config: {
-      whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
-      whatsappAuthDir: dir,
-    },
+    config: { whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE },
     logger: silentLogger,
-    store,
+    session,
     loadModule: async () => fakeModule(socket),
     onPairingCode: (c) => codigos.push(c),
   });
-  return { client, socket, chamadas, dir, store, codigos };
+  return { client, socket, chamadas, dir, session, codigos };
 }
 
 describe('normalizeWhatsappNumber', () => {
@@ -123,12 +122,9 @@ describe('isValidPairingCode', () => {
 describe('WhatsAppClient', () => {
   it('fica desligado sem número informado, sem tentar conectar', async () => {
     const client = new WhatsAppClient({
-      config: {
-        whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
-        whatsappAuthDir: '/tmp/nao-usado',
-      },
+      config: { whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE },
       logger: silentLogger,
-      store: fakeStore(undefined),
+      session: fakeSession(42, undefined),
       loadModule: async () => {
         throw new Error('não deveria carregar o pacote');
       },
@@ -143,12 +139,9 @@ describe('WhatsAppClient', () => {
 
   it('recusa código de pareamento inválido antes de conectar', async () => {
     const client = new WhatsAppClient({
-      config: {
-        whatsappPairingCode: 'lizz-ybot',
-        whatsappAuthDir: '/tmp/nao-usado',
-      },
+      config: { whatsappPairingCode: 'lizz-ybot' },
       logger: silentLogger,
-      store: fakeStore('5511999999999'),
+      session: fakeSession(42, '5511999999999'),
       loadModule: async () => {
         throw new Error('não deveria carregar o pacote');
       },
@@ -174,36 +167,37 @@ describe('WhatsAppClient', () => {
     assert.deepEqual(codigos, ['L1ZZYB9T'], 'o código é avisado para o bot enviar no chat');
   });
 
-  it('connectNumber normaliza, guarda e conecta com o número informado', async () => {
-    const { client, chamadas, store } = makeClient(null);
+  it('connectNumber normaliza e conecta com o número informado', async () => {
+    const { client, chamadas } = makeClient(null);
 
-    await client.connectNumber('+55 (11) 98888-7777');
+    const aceitou = await client.connectNumber('+55 (11) 98888-7777');
 
-    assert.equal(store.getNumber(), '5511988887777', 'guarda só dígitos');
+    assert.equal(aceitou, true);
+    assert.equal(client.numeroConectado(), '5511988887777', 'normaliza para só dígitos');
     const pedido = chamadas.find((c) => c.metodo === 'requestPairingCode');
     assert.equal(pedido?.args[0], '5511988887777');
   });
 
   it('recusa número curto demais sem tentar conectar', async () => {
-    const { client, chamadas, store } = makeClient(null);
+    const { client, chamadas } = makeClient(null);
 
-    await client.connectNumber('123');
+    const aceitou = await client.connectNumber('123');
 
+    assert.equal(aceitou, false);
     assert.equal(client.getStatus().state, 'erro');
     assert.match(client.getStatus().summary, /inválido/i);
-    assert.equal(store.getNumber(), undefined, 'não guarda número inválido');
     assert.equal(chamadas.length, 0, 'não tenta conectar');
   });
 
-  it('desconectar esquece o número e apaga a sessão', async () => {
-    const { client, store } = makeClient();
+  it('desconectar encerra a sessão e apaga as credenciais', async () => {
+    const { client, dir } = makeClient();
 
     await client.start();
     client.desconectar();
 
-    assert.equal(store.getNumber(), undefined);
     assert.equal(client.getStatus().state, 'desligado');
     assert.equal(client.isConnected(), false);
+    assert.equal(fs.existsSync(dir), false, 'credenciais apagadas');
   });
 
   it('não afirma conectado antes de a conexão abrir', async () => {
@@ -260,5 +254,146 @@ describe('WhatsAppClient', () => {
 
     assert.equal(client.getStatus().state, 'desligado');
     assert.ok(chamadas.some((c) => c.metodo === 'end'), 'deve encerrar o socket');
+  });
+});
+
+describe('WhatsAppManager: uma sessão por usuário', () => {
+  function fakeManagerStore(iniciais: number[] = []) {
+    const numeros = new Map<number, string>();
+    const authDirs = new Map<number, string>();
+    for (const id of iniciais) {
+      numeros.set(id, '5511900000000');
+      authDirs.set(id, fs.mkdtempSync(path.join(os.tmpdir(), `lizzy-mgr-${id}-`)));
+    }
+    return {
+      authDirFor: (id: number) => authDirs.get(id) ?? `/tmp/lizzy-mgr-${id}`,
+      get: (id: number) => ({
+        userId: id,
+        number: numeros.get(id),
+        authDir: authDirs.get(id) ?? `/tmp/lizzy-mgr-${id}`,
+        createdAt: undefined,
+      }),
+      set: (id: number, n: string) => {
+        numeros.set(id, n);
+        return { userId: id, number: n, authDir: `/tmp/lizzy-mgr-${id}`, createdAt: undefined };
+      },
+      clear: (id: number) => { numeros.delete(id); },
+      clearAuth: (id: number) => { authDirs.delete(id); },
+      listUserIds: () => [...numeros.keys()],
+      count: () => numeros.size,
+    };
+  }
+
+  /** Cria um manager com sockets falsos, sem tocar na rede. */
+  function makeManager(opts: { comNumero?: number[]; maxSessions?: number } = {}) {
+    const store = fakeManagerStore(opts.comNumero ?? []);
+    const sockets = new Map<number, ReturnType<typeof fakeSocket>['socket']>();
+    const codigos: { userId: number; code: string }[] = [];
+
+    const manager = new WhatsAppManager({
+      store: store as never,
+      logger: silentLogger,
+      pairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
+      maxSessions: opts.maxSessions ?? 20,
+      onPairingCode: (userId, code) => codigos.push({ userId, code }),
+      loadModule: async () => {
+        // Cada sessão recebe o próprio socket: é isso que garante isolamento.
+        const criado = fakeSocket();
+        sockets.set(sockets.size + 1, criado.socket);
+        return fakeModule(criado.socket);
+      },
+    });
+
+    return { manager, store, sockets, codigos };
+  }
+
+  it('usuário sem sessão aparece desligado, sem criar socket', () => {
+    const { manager, sockets } = makeManager();
+    assert.equal(manager.getStatus(999).state, 'desligado');
+    assert.equal(manager.isConnected(999), false);
+    assert.equal(sockets.size, 0, 'não cria socket à toa');
+  });
+
+  it('conecta um número novo e guarda a sessão do usuário certo', async () => {
+    const { manager, store, codigos } = makeManager();
+
+    const resultado = await manager.connect(777, '5511988887777');
+
+    assert.equal(resultado.ok, true);
+    assert.equal(store.get(777).number, '5511988887777');
+    assert.equal(manager.getStatus(777).state, 'aguardando_pareamento');
+    // O código vai para quem pediu, nunca para outro.
+    assert.equal(codigos.length, 1);
+    assert.equal(codigos[0]?.userId, 777);
+    assert.equal(codigos[0]?.code, 'L1ZZYB9T');
+  });
+
+  it('cada usuário tem sessão e socket próprios', async () => {
+    const { manager } = makeManager();
+
+    await manager.connect(111, '5511911111111');
+    await manager.connect(222, '5511922222222');
+
+    assert.equal(manager.activeCount(), 2, 'dois sockets independentes');
+    assert.equal(manager.getStatus(111).state, 'aguardando_pareamento');
+    assert.equal(manager.getStatus(222).state, 'aguardando_pareamento');
+  });
+
+  it('recusa número inválido sem guardar sessão', async () => {
+    const { manager, store } = makeManager();
+
+    const resultado = await manager.connect(333, '123');
+
+    assert.equal(resultado.ok, false);
+    assert.match(String(resultado.message), /inválido/i);
+    assert.equal(store.get(333).number, undefined, 'não deixa rastro');
+    assert.equal(manager.activeCount(), 0, 'não cria socket');
+  });
+
+  it('respeita o teto de sessões simultâneas', async () => {
+    const { manager, store } = makeManager({ maxSessions: 2 });
+
+    await manager.connect(1, '5511911111111');
+    await manager.connect(2, '5511922222222');
+    const recusado = await manager.connect(3, '5511933333333');
+
+    assert.equal(recusado.ok, false);
+    assert.match(String(recusado.message), /limite/i);
+    assert.equal(manager.activeCount(), 2, 'não passa do teto');
+    assert.equal(store.get(3).number, undefined, 'não guarda sessão recusada');
+  });
+
+  it('desconectar afeta só a sessão daquele usuário', async () => {
+    const { manager, store } = makeManager();
+
+    await manager.connect(111, '5511911111111');
+    await manager.connect(222, '5511922222222');
+
+    manager.desconectar(111);
+
+    assert.equal(manager.getStatus(111).state, 'desligado');
+    assert.equal(store.get(111).number, undefined, 'esqueceu o número do 111');
+    assert.equal(manager.getStatus(222).state, 'aguardando_pareamento', 'o 222 continua');
+    assert.equal(store.get(222).number, '5511922222222', 'número do 222 intacto');
+  });
+
+  it('retoma as sessões guardadas ao subir', async () => {
+    const { manager } = makeManager({ comNumero: [11, 22] });
+
+    await manager.startAll();
+
+    assert.equal(manager.activeCount(), 2);
+    assert.equal(manager.getStatus(11).state, 'aguardando_pareamento');
+    assert.equal(manager.getStatus(22).state, 'aguardando_pareamento');
+  });
+
+  it('stopAll encerra todas as sessões', async () => {
+    const { manager } = makeManager();
+
+    await manager.connect(1, '5511911111111');
+    await manager.connect(2, '5511922222222');
+    manager.stopAll();
+
+    assert.equal(manager.activeCount(), 0);
   });
 });

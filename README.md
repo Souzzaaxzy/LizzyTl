@@ -192,15 +192,16 @@ preenchida nunca desligar a proteção.
 
 ## WhatsApp
 
-A conexão usa o fork `@souzzaaxzy/baileys` (Baileys v7 com extensões) e é
-**independente do Telegram**: uma falha em uma não derruba a outra.
+A conexão usa o fork `@souzzaaxzy/baileys` e é **independente do Telegram**:
+uma falha em uma não derruba a outra.
 
-### Conectar pelo Telegram
+### Cada usuário conecta o próprio número
 
-Não é preciso editar arquivo nenhum. No Telegram:
+O bot é público, então **todo usuário** conecta o próprio WhatsApp, com sessão
+isolada. No Telegram:
 
 1. Abra `/start` e toque em **📱 WhatsApp**
-2. Toque em **🔗 Conectar WhatsApp** (o botão só aparece para o dono)
+2. Toque em **🔗 Conectar WhatsApp**
 3. Envie o número, com código do país e só dígitos: `5511999999999`
 4. O bot responde com o **código de pareamento** aqui mesmo no chat
 
@@ -208,16 +209,33 @@ No celular: **WhatsApp → Aparelhos conectados → Conectar aparelho → Conect
 com número de telefone**, e digite o código. Ele expira em cerca de um minuto;
 se expirar, toque em Conectar de novo.
 
-O número fica salvo em `data/whatsapp.json` (não versionado), então sobrevive
-ao reinício e não precisa ser digitado de novo.
+Use **🔌 Desconectar** para encerrar a sua sessão e apagar as credenciais.
 
-Para trocar de número ou refazer o pareamento, use **🔌 Desconectar** e conecte
-novamente. Isso apaga a sessão antiga, que só atrapalharia.
+### Isolamento entre usuários
 
-### Por que pareamento por código, e não QR
+Cada usuário tem socket, número e credenciais próprios:
 
-No Termux o terminal é pequeno e ler um QR é ruim. O código chega pelo próprio
-Telegram, então você pode parear de qualquer lugar.
+```
+data/whatsapp/<userId>.json      número daquele usuário
+data/whatsapp-auth/<userId>/     credenciais daquela sessão
+```
+
+A separação é o ponto crítico: sem ela, um usuário poderia enviar mensagens
+pela conta de outro. O código de pareamento vai sempre para o chat de quem
+pediu, nunca para outro usuário.
+
+### Teto de sessões
+
+Cada sessão mantém um socket e estado de criptografia. O teto é
+`WHATSAPP_MAX_SESSIONS` (padrão `20`):
+
+| Onde roda | Teto realista |
+| --- | --- |
+| Termux / Android | 10 a 30 sessões |
+| Servidor Linux | centenas, com memória adequada |
+
+Ao atingir o teto, o bot **recusa** novas conexões com uma mensagem clara, em
+vez de tentar e derrubar todas as sessões por falta de memória.
 
 ### Sobre o código L1ZZYB9T
 
@@ -227,11 +245,12 @@ I, O, L nem símbolos** (é proposital, evita confundir I/1 e O/0 ao digitar).
 
 Por isso `lizz-ybot` é impossível: tem 9 caracteres e usa `i`, `-` e `o`.
 `L1ZZYB9T` é o mais próximo — lê-se como "Lizzybot" (o `1` faz o papel do `i`,
-o `9` o do `o`). Para trocar, defina `WHATSAPP_PAIRING_CODE` no `.env`.
+o `9` o do `o`). Todos os usuários usam o mesmo código; o que os separa é a
+sessão, não o código.
 
 ### Estados possíveis
 
-A tela 📱 WhatsApp mostra o estado **real**, nunca "conectado" sem conexão:
+A tela 📱 WhatsApp mostra o estado **real da sessão de quem abriu**:
 
 | Estado | Significado |
 | --- | --- |
@@ -241,19 +260,17 @@ A tela 📱 WhatsApp mostra o estado **real**, nunca "conectado" sem conexão:
 | 🟢 Conectado | Sessão aberta e validada |
 | 🔴 Erro | Falha, com o motivo na própria tela |
 
-### Sessão e reconexão
+### Reconexão
 
-A sessão autenticada fica em `data/whatsapp-auth/`, que **não é versionado**.
-A conexão reconecta sozinha com espera crescente. Se você encerrar a sessão no
-celular, o bot avisa e não fica tentando reconectar em vão — use Desconectar e
-Conectar de novo.
+Cada sessão reconecta sozinha com espera crescente. Se a sessão for encerrada
+no celular, o bot avisa e não insiste — use Desconectar e Conectar de novo.
+Ao reiniciar, o bot retoma automaticamente todas as sessões guardadas.
 
 ### Chamadas de voz
 
 O fork inclui VoIP, que depende de WebRTC (`@roamhq/wrtc`). Esse pacote não tem
-binário para Android, então **chamadas não funcionam no Termux**. Mensagens,
-mídia e o pareamento funcionam normalmente: o WebRTC só é carregado se o VoIP
-for usado.
+binário para Android, então **chamadas não funcionam no Termux**. Mensagens e
+pareamento funcionam normalmente.
 
 ## Painel do dono
 

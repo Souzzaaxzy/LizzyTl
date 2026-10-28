@@ -60,6 +60,20 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - A conexão do WhatsApp deve poder rodar no mesmo processo que o Telegram, com
   tratamento de falhas independente.
 
+## Multi-sessão de WhatsApp
+
+- O bot é público: **cada usuário tem a própria sessão** de WhatsApp. O
+  isolamento é o ponto crítico — nunca use a sessão de um para atender outro.
+- `WhatsAppManager` (`src/whatsapp/manager.ts`) é a única porta de entrada:
+  o resto do bot nunca mexe em socket direto. Ele resolve estado, conexão e
+  desconexão por `userId`.
+- `WhatsappSessionStore` guarda `data/whatsapp/<userId>.json` (número) e
+  `data/whatsapp-auth/<userId>/` (credenciais). Nada versionado.
+- `WHATSAPP_MAX_SESSIONS` limita as sessões simultâneas. Sem teto, muitas
+  conexões derrubam o processo e **todas** as sessões caem junto.
+- O código de pareamento vai para o chat de quem pediu, via
+  `onPairingCode(userId, code)`. Nunca para outro usuário.
+
 ## ESM e o fork da Baileys
 
 - O projeto é **ESM** (`"type": "module"`, tsconfig `NodeNext`). Todo import

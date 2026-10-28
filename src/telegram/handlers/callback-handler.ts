@@ -15,7 +15,7 @@ import type { Context, Telegraf } from 'telegraf';
 import type { Logger } from '../../core/logger.js';
 import type { UserStore } from '../../data/user-store.js';
 import type { PendingActions } from '../state/pending-action.js';
-import type { WhatsAppClient } from '../../whatsapp/client.js';
+import type { WhatsAppManager } from '../../whatsapp/manager.js';
 import {
   CALLBACKS,
   screenContext,
@@ -27,10 +27,10 @@ import {
 export interface CallbackHandlerDeps {
   logger: Logger;
   users: UserStore;
-  /** Fonte do estado real do WhatsApp, mostrado na tela correspondente. */
-  whatsapp?: Pick<WhatsAppClient, 'getStatus'>;
-  /** Cliente completo, para ações que mudam o estado (conectar/desconectar). */
-  whatsappFull?: Pick<WhatsAppClient, 'desconectar'>;
+  /** Estado real do WhatsApp do usuário que está navegando. */
+  whatsapp?: Pick<WhatsAppManager, 'getStatus'>;
+  /** Ações que mudam o estado da sessão do usuário (conectar/desconectar). */
+  whatsappFull?: Pick<WhatsAppManager, 'desconectar'>;
   /** Ações que esperam a próxima mensagem do usuário. */
   pendingActions?: PendingActions;
 }
@@ -72,9 +72,9 @@ function contextFor(ctx: Context, deps: CallbackHandlerDeps): ScreenContext {
   const user = userId !== undefined ? deps.users.get(userId) ?? null : null;
   const base = {
     ...screenContext(user, ctx.from),
-    // Tolerante a ausência: uma tela não pode derrubar a atualização inteira
-    // só porque a fonte de estado não foi injetada.
-    whatsapp: deps.whatsapp?.getStatus(),
+    // Estado do WhatsApp DE QUEM ESTÁ NAVEGANDO, nunca de outro usuário.
+    // Tolerante a ausência: uma tela não pode derrubar a atualização inteira.
+    whatsapp: userId !== undefined ? deps.whatsapp?.getStatus(userId) : undefined,
   };
 
   if (!deps.users.isOwner(userId)) {
@@ -124,20 +124,19 @@ async function renderScreen(
 }
 
 /**
- * Pede o número ao dono. A próxima mensagem dele é interpretada como número,
- * não como texto comum — é para isso que serve a ação pendente.
+ * Pede o número ao usuário. A próxima mensagem dele é interpretada como
+ * número, não como texto comum — é para isso que serve a ação pendente.
+ *
+ * Qualquer usuário pode conectar o próprio número: o bot é público. O que
+ * importa é que a sessão criada pertença a quem pediu.
  */
 async function handleWhatsappConnect(
   ctx: Context,
   deps: CallbackHandlerDeps,
 ): Promise<void> {
   const userId = ctx.from?.id;
-  // A checagem é refeita aqui: o callback pode ser forjado por qualquer um.
-  if (userId === undefined || !deps.users.isOwner(userId)) {
-    deps.logger.warn(
-      `Tentativa de conectar o WhatsApp pelo usuário ${userId ?? 'desconhecido'}.`,
-    );
-    await ctx.answerCbQuery('Acesso restrito.');
+  if (userId === undefined) {
+    await ctx.answerCbQuery();
     return;
   }
 
@@ -159,19 +158,23 @@ async function handleWhatsappConnect(
     .catch(() => undefined);
 }
 
-/** Desconecta o WhatsApp, apaga a sessão e esquece o número. */
+/**
+ * Desconecta a sessão de quem pediu, apagando as credenciais dele.
+ *
+ * Só afeta a própria sessão: a de outro usuário nunca é tocada.
+ */
 async function handleWhatsappDisconnect(
   ctx: Context,
   deps: CallbackHandlerDeps,
 ): Promise<void> {
   const userId = ctx.from?.id;
-  if (userId === undefined || !deps.users.isOwner(userId)) {
-    await ctx.answerCbQuery('Acesso restrito.');
+  if (userId === undefined) {
+    await ctx.answerCbQuery();
     return;
   }
 
   deps.pendingActions?.clear(userId);
-  deps.whatsappFull?.desconectar();
+  deps.whatsappFull?.desconectar(userId);
   await ctx.answerCbQuery('WhatsApp desconectado.');
   await renderScreen(ctx, screenForCallback(CALLBACKS.MENU_WHATSAPP)!, deps);
 }

@@ -41,8 +41,14 @@ export interface Config {
   whatsappNumber?: string;
   /** Código de pareamento de 8 caracteres, no alfabeto aceito pelo WhatsApp. */
   whatsappPairingCode: string;
-  /** Onde a sessão autenticada do WhatsApp é gravada. Nunca vai para o Git. */
-  whatsappAuthDir: string;
+  /**
+   * Teto de sessões de WhatsApp simultâneas.
+   *
+   * Cada sessão mantém um socket e estado de criptografia. Sem teto, muitas
+   * conexões derrubariam o processo por falta de memória, e todas as sessões
+   * cairiam junto — inclusive as que já funcionavam.
+   */
+  whatsappMaxSessions: number;
 }
 
 /**
@@ -165,7 +171,7 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const whatsappNumber = rawWhatsappNumber.replace(/\D/g, '');
   const rawPairingCode = (env.WHATSAPP_PAIRING_CODE ?? '').trim().toUpperCase();
   const whatsappPairingCode = rawPairingCode === '' ? DEFAULT_WHATSAPP_PAIRING_CODE : rawPairingCode;
-  const whatsappAuthDir = path.resolve(config_dataDir(env, projectRoot), 'whatsapp-auth');
+  const whatsappMaxSessions = parsePositiveInt(env.WHATSAPP_MAX_SESSIONS, 20);
   const rateLimitMax = parsePositiveInt(env.RATE_LIMIT_MAX, 20);
   const rateLimitWindowSeconds = parsePositiveInt(env.RATE_LIMIT_WINDOW_SECONDS, 60);
   const rawOwnerId = (env.OWNER_TELEGRAM_ID ?? '').trim();
@@ -185,6 +191,6 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     rateLimitWindowSeconds,
     whatsappNumber: whatsappNumber === '' ? undefined : whatsappNumber,
     whatsappPairingCode,
-    whatsappAuthDir,
+    whatsappMaxSessions,
   };
 }

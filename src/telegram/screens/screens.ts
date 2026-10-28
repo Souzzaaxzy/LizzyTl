@@ -281,13 +281,13 @@ export function adminKeyboard(): InlineKeyboardMarkup {
  * navegar entre as telas sem passar pelo menu a cada vez.
  */
 /**
- * Teclado da tela do WhatsApp. O botão de conectar só aparece para o dono,
- * porque só ele informa o número do bot. Quem não é dono só vê o estado.
+ * Teclado da tela do WhatsApp.
+ *
+ * O bot é público: todo usuário conecta o próprio número, então os botões
+ * aparecem para todos. Cada sessão é isolada — o número de um nunca é usado
+ * pela sessão de outro.
  */
 export function whatsappKeyboard(context: ScreenContext): InlineKeyboardMarkup {
-  if (!context.admin) {
-    return backKeyboard();
-  }
   const conectado = context.whatsapp?.state === 'conectado';
   const acao = conectado
     ? Markup.button.callback('🔌 Desconectar', CALLBACKS.WA_DISCONNECT)
@@ -383,8 +383,8 @@ export function buildWhatsappCaption(context: ScreenContext): string {
     `✦ ${escapeHtml(status.summary)}`,
   ];
 
-  // Só o dono configura o número; os demais apenas veem o estado.
-  if (context.admin && status.state !== 'conectado') {
+  // Orienta qualquer usuário a conectar o próprio número.
+  if (status.state !== 'conectado') {
     linhas.push(
       '',
       '♛ 𝐓𝐨𝐪𝐮𝐞 𝐞𝐦 "𝐂𝐨𝐧𝐞𝐜𝐭𝐚𝐫 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩" 𝐞 𝐞𝐧𝐯𝐢𝐞 𝐨 𝐧𝐮́𝐦𝐞𝐫𝐨 𝐜𝐨𝐦 𝐨',

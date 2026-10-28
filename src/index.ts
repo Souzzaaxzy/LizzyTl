@@ -1,13 +1,15 @@
 /**
  * Ponto de entrada da 𝐋𝐢𝐳𝐳𝐲 𝐝𝐨 𝐩𝐫𝐢𝐯𝐲.
  *
- * Responsabilidades desta etapa:
+ * Responsabilidades:
  * - Carregar .env e validar a configuração obrigatória.
- * - Preparar a persistência local (usuários e cache de mídia).
+ * - Preparar a persistência local (usuários, cache de mídia, sessões).
  * - Registrar comandos e callbacks do Telegram.
- * - Iniciar o bot e tratar falhas/encerramento de forma organizada.
+ * - Subir as sessões de WhatsApp de cada usuário.
+ * - Tratar falhas e encerramento de forma organizada.
  *
- * A conexão do WhatsApp é independente e não é iniciada aqui.
+ * O Telegram e o WhatsApp são independentes: uma falha em um não derruba o
+ * outro. O mesmo vale entre as sessões de WhatsApp dos diferentes usuários.
  */
 
 import { ConfigError, loadConfig } from './config/config.js';
@@ -16,6 +18,7 @@ import { createLogger } from './core/logger.js';
 import { RateLimiter } from './core/rate-limiter.js';
 import { MediaCache } from './data/media-cache.js';
 import { UserStore } from './data/user-store.js';
+import { WhatsappSessionStore } from './data/whatsapp-session-store.js';
 import { registerHelpCommand } from './telegram/commands/help.js';
 import { publishBotCommands } from './telegram/commands/publish-commands.js';
 import { registerStartCommand } from './telegram/commands/start.js';
@@ -23,9 +26,8 @@ import { createBot } from './telegram/client.js';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler.js';
 import { registerMessageHandler } from './telegram/handlers/message-handler.js';
 import { registerRateLimit } from './telegram/handlers/rate-limit.js';
-import { WhatsappConfigStore } from './data/whatsapp-config-store.js';
 import { PendingActions } from './telegram/state/pending-action.js';
-import { WhatsAppClient } from './whatsapp/client.js';
+import { WhatsAppManager } from './whatsapp/manager.js';
 
 async function main(): Promise<void> {
   // Carrega o .env a partir da raiz do projeto, e não do diretório atual.
@@ -50,26 +52,34 @@ async function main(): Promise<void> {
 
   const logger = createLogger(config.logLevel);
 
-  // O número do WhatsApp é informado pelo dono no próprio Telegram, então fica
-  // em disco para sobreviver ao reinício.
-  const whatsappStore = new WhatsappConfigStore(config.dataDir, logger);
+  const users = new UserStore({
+    dataDir: config.dataDir,
+    logger,
+    ownerId: config.ownerTelegramId,
+  });
+  const mediaCache = new MediaCache(config.dataDir, logger);
+  const limiter = new RateLimiter({
+    limit: config.rateLimitMax,
+    windowMs: config.rateLimitWindowSeconds * 1000,
+  });
+  // Cada usuário tem a própria sessão de WhatsApp, isolada em data/.
+  const whatsappStore = new WhatsappSessionStore(config.dataDir, logger);
   const pendingActions = new PendingActions();
 
-  // O WhatsApp é independente do Telegram: sobe em paralelo e uma falha aqui
-  // não impede o bot do Telegram de funcionar.
-  const whatsapp = new WhatsAppClient({
-    config,
-    logger,
+  const bot = createBot({ token: config.telegramBotToken, logger });
+
+  // O WhatsApp é independente do Telegram: uma falha aqui não impede o bot do
+  // Telegram de funcionar. O código de pareamento vai para o chat do próprio
+  // usuário dono da sessão, nunca para outro.
+  const whatsapp = new WhatsAppManager({
     store: whatsappStore,
-    // O código de pareamento é enviado ao dono no chat, não só no log.
-    onPairingCode: (codigo) => {
-      const dono = config.ownerTelegramId;
-      if (dono === undefined) {
-        return;
-      }
+    logger,
+    pairingCode: config.whatsappPairingCode,
+    maxSessions: config.whatsappMaxSessions,
+    onPairingCode: (userId, codigo) => {
       void bot.telegram
         .sendMessage(
-          dono,
+          userId,
           [
             '📱 𝐂𝐨́𝐝𝐢𝐠𝐨 𝐝𝐞 𝐩𝐚𝐫𝐞𝐚𝐦𝐞𝐧𝐭𝐨 𝐝𝐨 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
             '',
@@ -84,24 +94,13 @@ async function main(): Promise<void> {
           { parse_mode: 'HTML' },
         )
         .catch((error: unknown) => {
-          logger.error('Falha ao enviar o código de pareamento no Telegram.', error);
+          logger.error(
+            `Falha ao enviar o código de pareamento ao usuário ${userId}.`,
+            error,
+          );
         });
     },
   });
-
-  const users = new UserStore({
-    dataDir: config.dataDir,
-    logger,
-    ownerId: config.ownerTelegramId,
-  });
-  const mediaCache = new MediaCache(config.dataDir, logger);
-
-  const limiter = new RateLimiter({
-    limit: config.rateLimitMax,
-    windowMs: config.rateLimitWindowSeconds * 1000,
-  });
-
-  const bot = createBot({ token: config.telegramBotToken, logger });
 
   // O limite vem primeiro: barra o abuso antes de qualquer trabalho caro.
   registerRateLimit(bot, { limiter, logger, users });
@@ -110,7 +109,7 @@ async function main(): Promise<void> {
   // mensagens por último, para ela só tratar o que ninguém mais tratou.
   registerStartCommand(bot, { config, logger, users, mediaCache, whatsapp });
   registerHelpCommand(bot, { logger });
-  registerCallbackHandler(bot, { logger, users, whatsapp, pendingActions });
+  registerCallbackHandler(bot, { logger, users, whatsapp, whatsappFull: whatsapp, pendingActions });
   registerMessageHandler(bot, { logger, users, whatsapp, pendingActions });
 
   // Limpeza periódica do mapa do limitador, para ele não crescer sem limite.
@@ -122,7 +121,7 @@ async function main(): Promise<void> {
     logger.info(`Encerrando após ${signal}...`);
     clearInterval(pruneTimer);
     // Encerra as duas conexões de forma organizada, uma não depende da outra.
-    whatsapp.stop();
+    whatsapp.stopAll();
     try {
       bot.stop(signal);
     } catch (error) {
@@ -154,11 +153,10 @@ async function main(): Promise<void> {
       void publishBotCommands(bot, logger);
     });
 
-    // Só inicia o WhatsApp depois que o Telegram subiu, e sem await: uma falha
-    // aqui não pode impedir o Telegram de rodar.
-    void whatsapp.start().then(() => {
-      const status = whatsapp.getStatus();
-      logger.info(`Estado do WhatsApp: ${status.state} — ${status.summary}`);
+    // Retoma as sessões de WhatsApp depois que o Telegram subiu, e sem await:
+    // uma falha aqui não pode impedir o Telegram de rodar.
+    void whatsapp.startAll().then(() => {
+      logger.info(`Sessões de WhatsApp ativas: ${whatsapp.activeCount()}.`);
     });
   } catch (error) {
     logger.error(
