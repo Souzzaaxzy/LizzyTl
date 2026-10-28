@@ -14,22 +14,25 @@ import * as path from 'node:path';
 
 import type { Telegraf } from 'telegraf';
 
-import type { Config } from '../../config/config';
-import type { Logger } from '../../core/logger';
-import type { MediaCache } from '../../data/media-cache';
-import type { UserStore } from '../../data/user-store';
+import type { Config } from '../../config/config.js';
+import type { Logger } from '../../core/logger.js';
+import type { MediaCache } from '../../data/media-cache.js';
+import type { UserStore } from '../../data/user-store.js';
+import type { WhatsAppClient } from '../../whatsapp/client.js';
 import {
   buildMenuCaption,
   menuKeyboardFor,
   resolveDisplayName,
   screenContext,
-} from '../screens/screens';
+} from '../screens/screens.js';
 
 export interface StartCommandDeps {
   config: Pick<Config, 'startMediaPath'>;
   logger: Logger;
   users: UserStore;
   mediaCache: MediaCache;
+  /** Usado para montar o menu com o estado real do WhatsApp. */
+  whatsapp: WhatsAppClient;
 }
 
 export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): void {
@@ -43,6 +46,7 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     // O dono recebe a linha extra do painel; os demais, o menu padrão.
     const keyboard = menuKeyboardFor({
       ...screenContext(record, ctx.from),
+      whatsapp: deps.whatsapp.getStatus(),
       ...(deps.users.isOwner(ctx.from?.id)
         ? {
             admin: {

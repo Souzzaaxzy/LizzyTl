@@ -60,6 +60,22 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - A conexão do WhatsApp deve poder rodar no mesmo processo que o Telegram, com
   tratamento de falhas independente.
 
+## ESM e o fork da Baileys
+
+- O projeto é **ESM** (`"type": "module"`, tsconfig `NodeNext`). Todo import
+  relativo precisa terminar em `.js`. Não existe `__dirname`: use
+  `fileURLToPath(import.meta.url)`.
+- O fork `@souzzaaxzy/baileys` publica `WAProto/index.d.ts` com um `enum`
+  aninhado em classe, que é sintaxe inválida em arquivo de declaração. O
+  `skipLibCheck` **não** cobre erro de sintaxe. Por isso o pacote é carregado
+  por `baileys-loader.ts`, com o contrato declarado em `baileys-types.ts`.
+  Se o fork corrigir a tipagem, o loader pode virar import normal.
+- O pareamento usa `requestPairingCode(numero, codigo)`. O código precisa ter
+  **exatamente 8 caracteres** do alfabeto Crockford Base32 — sem I, O, L nem
+  símbolos. O padrão da Lizzy é `L1ZZYB9T`.
+- `@roamhq/wrtc` não tem binário para Android: VoIP não roda no Termux. O resto
+  funciona, porque ele é carregado por import dinâmico dentro do módulo de voz.
+
 ## Lições aprendidas (não repita estes erros)
 
 ### Auditoria de bugs (corrigidos)

@@ -19,6 +19,7 @@ funcionalidade foi implementada nesta fase.
 - [Localização da mídia](#localização-da-mídia)
 - [Comandos](#comandos)
 - [Proteção contra abuso](#proteção-contra-abuso)
+- [WhatsApp](#whatsapp)
 - [Painel do dono](#painel-do-dono)
 - [Perfil](#perfil)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
@@ -188,6 +189,72 @@ O dono é isento, porque administrar o bot envolve muitos cliques seguidos.
 
 Valores inválidos nas variáveis caem no padrão, para uma configuração mal
 preenchida nunca desligar a proteção.
+
+## WhatsApp
+
+A conexão usa o fork `@souzzaaxzy/baileys` (Baileys v7 com extensões). Ela é
+**independente do Telegram**: uma falha em uma não derruba a outra.
+
+### Configurar
+
+```env
+WHATSAPP_NUMBER=5511999999999
+WHATSAPP_PAIRING_CODE=L1ZZYB9T
+```
+
+Sem `WHATSAPP_NUMBER`, o WhatsApp fica desligado e o bot só roda o Telegram.
+O número vai com código do país e **só dígitos** — `+`, espaço e traço são
+removidos automaticamente.
+
+### Parear
+
+O pareamento é por **código**, não por QR: no Termux o terminal é pequeno e ler
+um QR é ruim. Ao iniciar, o bot imprime o código no log:
+
+```
+[lizzy:whatsapp] Código de pareamento do WhatsApp: L1ZZYB9T
+[lizzy:whatsapp] No celular: WhatsApp > Aparelhos conectados > Conectar aparelho
+                 > Conectar com número de telefone.
+```
+
+No celular, use esse código. Ele vale uma vez e expira em cerca de um minuto.
+
+### Sobre o código L1ZZYB9T
+
+O WhatsApp só aceita códigos de **exatamente 8 caracteres** do alfabeto
+Crockford Base32: `123456789ABCDEFGHJKLMNPQRSTVWXYZ`. Esse alfabeto **não tem
+I, O, L nem símbolos** (é proposital, evita confundir I/1 e O/0 ao digitar).
+
+Por isso `lizz-ybot` é impossível: tem 9 caracteres e usa `i`, `-` e `o`.
+`L1ZZYB9T` é o mais próximo — lê-se como "Lizzybot" (o `1` faz o papel do `i`,
+o `9` o do `o`). O código é validado antes de tentar conectar, então um valor
+inválido no `.env` produz uma mensagem clara em vez de erro técnico.
+
+### Estados possíveis
+
+A tela 📱 WhatsApp mostra o estado **real**, nunca "conectado" sem conexão:
+
+| Estado | Significado |
+| --- | --- |
+| 🔴 Desligado | Sem `WHATSAPP_NUMBER`, ou encerrado |
+| 🟡 Conectando | Abrindo a conexão |
+| 🟡 Aguardando pareamento | Código gerado, esperando o celular |
+| 🟢 Conectado | Sessão aberta e validada |
+| 🔴 Erro | Falha, com o motivo na própria tela |
+
+### Sessão e reconexão
+
+A sessão autenticada fica em `data/whatsapp-auth/`, que **não é versionado**.
+A conexão reconecta sozinha com espera crescente. Se você encerrar a sessão no
+celular, o bot avisa e não fica tentando reconectar em vão — para parear de
+novo, apague `data/whatsapp-auth` e reinicie.
+
+### Chamadas de voz
+
+O fork inclui VoIP, que depende de WebRTC (`@roamhq/wrtc`). Esse pacote não tem
+binário para Android, então **chamadas não funcionam no Termux**. Mensagens,
+mídia e o pareamento funcionam normalmente: o WebRTC só é carregado se o VoIP
+for usado.
 
 ## Painel do dono
 

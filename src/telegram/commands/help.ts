@@ -7,8 +7,8 @@
 
 import type { Telegraf } from 'telegraf';
 
-import type { Logger } from '../../core/logger';
-import { buildHelpCaption, buildMenuKeyboard } from '../screens/screens';
+import type { Logger } from '../../core/logger.js';
+import { buildHelpCaption, buildMenuKeyboard } from '../screens/screens.js';
 
 export interface HelpCommandDeps {
   logger: Logger;

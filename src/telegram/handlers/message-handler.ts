@@ -11,8 +11,8 @@
 
 import type { Telegraf } from 'telegraf';
 
-import type { Logger } from '../../core/logger';
-import { buildMenuKeyboard } from '../screens/screens';
+import type { Logger } from '../../core/logger.js';
+import { buildMenuKeyboard } from '../screens/screens.js';
 
 export interface MessageHandlerDeps {
   logger: Logger;

@@ -11,9 +11,9 @@
 
 import type { Context, MiddlewareFn, Telegraf } from 'telegraf';
 
-import type { Logger } from '../../core/logger';
-import type { RateLimiter } from '../../core/rate-limiter';
-import type { UserStore } from '../../data/user-store';
+import type { Logger } from '../../core/logger.js';
+import type { RateLimiter } from '../../core/rate-limiter.js';
+import type { UserStore } from '../../data/user-store.js';
 
 export interface RateLimitMiddlewareDeps {
   limiter: RateLimiter;

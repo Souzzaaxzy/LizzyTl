@@ -1,8 +1,8 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { RateLimiter } from '../src/core/rate-limiter';
-import { parsePositiveInt } from '../src/config/config';
+import { RateLimiter } from '../src/core/rate-limiter.js';
+import { parsePositiveInt } from '../src/config/config.js';
 
 /** Relógio falso, para testar a janela sem esperar tempo real. */
 function fakeClock(start = 1_000_000) {

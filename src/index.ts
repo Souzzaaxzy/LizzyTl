@@ -10,20 +10,20 @@
  * A conexão do WhatsApp é independente e não é iniciada aqui.
  */
 
-import { ConfigError, loadConfig } from './config/config';
-import { PROJECT_ROOT, loadEnvFile } from './config/env';
-import { createLogger } from './core/logger';
-import { RateLimiter } from './core/rate-limiter';
-import { MediaCache } from './data/media-cache';
-import { UserStore } from './data/user-store';
-import { registerHelpCommand } from './telegram/commands/help';
-import { publishBotCommands } from './telegram/commands/publish-commands';
-import { registerStartCommand } from './telegram/commands/start';
-import { createBot } from './telegram/client';
-import { registerCallbackHandler } from './telegram/handlers/callback-handler';
-import { registerMessageHandler } from './telegram/handlers/message-handler';
-import { registerRateLimit } from './telegram/handlers/rate-limit';
-import { getWhatsAppIntegrationStatus } from './whatsapp/client';
+import { ConfigError, loadConfig } from './config/config.js';
+import { PROJECT_ROOT, loadEnvFile } from './config/env.js';
+import { createLogger } from './core/logger.js';
+import { RateLimiter } from './core/rate-limiter.js';
+import { MediaCache } from './data/media-cache.js';
+import { UserStore } from './data/user-store.js';
+import { registerHelpCommand } from './telegram/commands/help.js';
+import { publishBotCommands } from './telegram/commands/publish-commands.js';
+import { registerStartCommand } from './telegram/commands/start.js';
+import { createBot } from './telegram/client.js';
+import { registerCallbackHandler } from './telegram/handlers/callback-handler.js';
+import { registerMessageHandler } from './telegram/handlers/message-handler.js';
+import { registerRateLimit } from './telegram/handlers/rate-limit.js';
+import { WhatsAppClient } from './whatsapp/client.js';
 
 async function main(): Promise<void> {
   // Carrega o .env a partir da raiz do projeto, e não do diretório atual.
@@ -48,8 +48,12 @@ async function main(): Promise<void> {
 
   const logger = createLogger(config.logLevel);
 
-  const whatsapp = getWhatsAppIntegrationStatus();
-  logger.info(`Estado da integração com WhatsApp: ${whatsapp.state} — ${whatsapp.summary}`);
+  // O WhatsApp é independente do Telegram: sobe em paralelo e uma falha aqui
+  // não impede o bot do Telegram de funcionar.
+  const whatsapp = new WhatsAppClient({
+    config,
+    logger,
+  });
 
   const users = new UserStore({
     dataDir: config.dataDir,
@@ -70,9 +74,9 @@ async function main(): Promise<void> {
 
   // Ordem importa: comandos e callbacks primeiro, e a resposta genérica a
   // mensagens por último, para ela só tratar o que ninguém mais tratou.
-  registerStartCommand(bot, { config, logger, users, mediaCache });
+  registerStartCommand(bot, { config, logger, users, mediaCache, whatsapp });
   registerHelpCommand(bot, { logger });
-  registerCallbackHandler(bot, { logger, users });
+  registerCallbackHandler(bot, { logger, users, whatsapp });
   registerMessageHandler(bot, { logger });
 
   // Limpeza periódica do mapa do limitador, para ele não crescer sem limite.
@@ -83,6 +87,8 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`Encerrando após ${signal}...`);
     clearInterval(pruneTimer);
+    // Encerra as duas conexões de forma organizada, uma não depende da outra.
+    whatsapp.stop();
     try {
       bot.stop(signal);
     } catch (error) {
@@ -112,6 +118,13 @@ async function main(): Promise<void> {
       logger.info('Bot do Telegram em execução.');
       // Publica a lista de comandos para o menu "/" do Telegram.
       void publishBotCommands(bot, logger);
+    });
+
+    // Só inicia o WhatsApp depois que o Telegram subiu, e sem await: uma falha
+    // aqui não pode impedir o Telegram de rodar.
+    void whatsapp.start().then(() => {
+      const status = whatsapp.getStatus();
+      logger.info(`Estado do WhatsApp: ${status.state} — ${status.summary}`);
     });
   } catch (error) {
     logger.error(

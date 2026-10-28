@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { UserRecord } from '../src/data/user-store';
+import type { UserRecord } from '../src/data/user-store.js';
 import {
   BACK_BUTTON_LABEL,
   BOT_COMMANDS,
@@ -20,7 +20,7 @@ import {
   escapeHtml,
   formatDate,
   screenForCallback,
-} from '../src/telegram/screens/screens';
+} from '../src/telegram/screens/screens.js';
 
 /** Extrai o callback_data de um botão, ignorando variantes que não o possuem. */
 function callbackOf(button: { callback_data?: string } | unknown): string | undefined {

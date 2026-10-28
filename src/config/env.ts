@@ -8,11 +8,18 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import * as dotenv from 'dotenv';
 
-/** Raiz do projeto, resolvida a partir deste arquivo (funciona em src/ e dist/). */
-export const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+/**
+ * Raiz do projeto, resolvida a partir deste arquivo.
+ *
+ * Em ESM não existe __dirname, então o caminho vem de import.meta.url. Funciona
+ * tanto rodando de src/ (tsx) quanto de dist/ (build).
+ */
+const esteArquivo = fileURLToPath(import.meta.url);
+export const PROJECT_ROOT = path.resolve(path.dirname(esteArquivo), '..', '..');
 
 export interface EnvFileInfo {
   /** Caminho onde o .env foi procurado. */

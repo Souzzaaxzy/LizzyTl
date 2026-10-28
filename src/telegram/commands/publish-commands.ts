@@ -10,8 +10,8 @@
 
 import type { Telegraf } from 'telegraf';
 
-import type { Logger } from '../../core/logger';
-import { BOT_COMMANDS } from '../screens/screens';
+import type { Logger } from '../../core/logger.js';
+import { BOT_COMMANDS } from '../screens/screens.js';
 
 export async function publishBotCommands(bot: Telegraf, logger: Logger): Promise<void> {
   try {

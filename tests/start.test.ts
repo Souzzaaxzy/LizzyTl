@@ -6,18 +6,18 @@ import { afterEach, before, describe, it } from 'node:test';
 
 import { Telegram, type Telegraf } from 'telegraf';
 
-import { createLogger } from '../src/core/logger';
-import { MediaCache } from '../src/data/media-cache';
-import { UserStore, sanitizeUsers } from '../src/data/user-store';
-import { registerHelpCommand } from '../src/telegram/commands/help';
-import { publishBotCommands } from '../src/telegram/commands/publish-commands';
-import { registerStartCommand } from '../src/telegram/commands/start';
-import { createBot } from '../src/telegram/client';
-import { isNotModified, registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
-import { registerMessageHandler } from '../src/telegram/handlers/message-handler';
-import { registerRateLimit } from '../src/telegram/handlers/rate-limit';
-import { RateLimiter } from '../src/core/rate-limiter';
-import { BOT_COMMANDS, CALLBACKS, resolveDisplayName } from '../src/telegram/screens/screens';
+import { createLogger } from '../src/core/logger.js';
+import { MediaCache } from '../src/data/media-cache.js';
+import { UserStore, sanitizeUsers } from '../src/data/user-store.js';
+import { registerHelpCommand } from '../src/telegram/commands/help.js';
+import { publishBotCommands } from '../src/telegram/commands/publish-commands.js';
+import { registerStartCommand } from '../src/telegram/commands/start.js';
+import { createBot } from '../src/telegram/client.js';
+import { isNotModified, registerCallbackHandler } from '../src/telegram/handlers/callback-handler.js';
+import { registerMessageHandler } from '../src/telegram/handlers/message-handler.js';
+import { registerRateLimit } from '../src/telegram/handlers/rate-limit.js';
+import { RateLimiter } from '../src/core/rate-limiter.js';
+import { BOT_COMMANDS, CALLBACKS, resolveDisplayName } from '../src/telegram/screens/screens.js';
 
 interface RecordedCall {
   method: string;
@@ -28,6 +28,20 @@ interface RecordedCall {
 const MINIMAL_MP4 = Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex');
 
 const silentLogger = createLogger('error');
+
+/**
+ * Stub do cliente WhatsApp: os testes não abrem conexão real. O estado é
+ * controlável para verificar que a tela mostra o que o cliente reporta.
+ */
+function fakeWhatsapp(state: 'desligado' | 'conectado' | 'erro' = 'desligado') {
+  const status = { state, summary: `estado de teste: ${state}` };
+  return {
+    getStatus: () => status,
+    isConnected: () => state === 'conectado',
+    start: async () => undefined,
+    stop: () => undefined,
+  };
+}
 
 /**
  * Substitui a chamada HTTP real do Telegram por um gravador, sem tocar na rede.
@@ -212,6 +226,7 @@ describe('comando /start (com mídia)', () => {
       logger: silentLogger,
       users: makeStore(),
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     const calls = stubTelegram();
 
@@ -233,6 +248,7 @@ describe('comando /start (com mídia)', () => {
       logger: silentLogger,
       users,
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     stubTelegram();
 
@@ -251,6 +267,7 @@ describe('comando /start (com mídia)', () => {
       logger: silentLogger,
       users: makeStore(),
       mediaCache: cache,
+      whatsapp: fakeWhatsapp(),
     });
     const calls = stubTelegram();
 
@@ -273,6 +290,7 @@ describe('comando /start (sem mídia)', () => {
       logger: silentLogger,
       users: makeStore(),
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     const calls = stubTelegram();
 
@@ -291,7 +309,7 @@ describe('navegação por callbacks', () => {
     const users = makeStore();
     users.touch({ id: 7001, username: 'perfil', first_name: 'Perfil' });
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users });
+    registerCallbackHandler(bot, { logger: silentLogger, users, whatsapp: fakeWhatsapp() });
     const calls = stubTelegram();
 
     await bot.handleUpdate(callbackUpdate(10, CALLBACKS.MENU_PROFILE, 7001));
@@ -309,7 +327,7 @@ describe('navegação por callbacks', () => {
 
   it('responde todos os callbacks de menu sem derrubar o processo', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() });
     const calls = stubTelegram();
 
     let id = 20;
@@ -322,7 +340,7 @@ describe('navegação por callbacks', () => {
 
   it('trata callback desconhecido sem lançar erro', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() });
     const calls = stubTelegram();
 
     await bot.handleUpdate(callbackUpdate(30, 'menu_inexistente'));
@@ -333,7 +351,7 @@ describe('navegação por callbacks', () => {
 
   it('responde callbacks fora dos prefixos conhecidos', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore() });
+    registerCallbackHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() });
     const calls = stubTelegram();
 
     await bot.handleUpdate(callbackUpdate(31, 'outro_prefixo'));
@@ -393,6 +411,7 @@ describe('mensagens que não são comandos', () => {
       logger: silentLogger,
       users: makeStore(),
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     registerMessageHandler(bot, { logger: silentLogger });
     const calls = stubTelegram();
@@ -442,7 +461,7 @@ describe('segurança do painel do dono', () => {
   function adminBot() {
     const users = makeStore(OWNER_ID);
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users });
+    registerCallbackHandler(bot, { logger: silentLogger, users, whatsapp: fakeWhatsapp() });
     return { bot, users };
   }
 
@@ -520,6 +539,7 @@ describe('proteção contra abuso', () => {
       logger: silentLogger,
       users,
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     registerMessageHandler(bot, { logger: silentLogger });
     return { bot, users };
@@ -583,7 +603,7 @@ describe('proteção contra abuso', () => {
     const limiter = new RateLimiter({ limit: 1, windowMs: 60_000 });
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerRateLimit(bot, { limiter, logger: silentLogger, users });
-    registerCallbackHandler(bot, { logger: silentLogger, users });
+    registerCallbackHandler(bot, { logger: silentLogger, users, whatsapp: fakeWhatsapp() });
 
     stubTelegram();
     await bot.handleUpdate(callbackUpdate(140, CALLBACKS.MENU_PROFILE, 6001));
@@ -623,6 +643,7 @@ describe('regressões encontradas na auditoria', () => {
       logger: silentLogger,
       users,
       mediaCache: makeCache(),
+      whatsapp: fakeWhatsapp(),
     });
     registerMessageHandler(bot, { logger: silentLogger });
     const calls = stubTelegram();
@@ -656,7 +677,7 @@ describe('regressões encontradas na auditoria', () => {
   it('não duplica a mensagem quando a edição não muda nada', async () => {
     const users = makeStore();
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerCallbackHandler(bot, { logger: silentLogger, users });
+    registerCallbackHandler(bot, { logger: silentLogger, users, whatsapp: fakeWhatsapp() });
     stubTelegram();
 
     // Simula o 400 'message is not modified' do Telegram.

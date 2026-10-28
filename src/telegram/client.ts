@@ -7,7 +7,7 @@
 
 import { Telegraf } from 'telegraf';
 
-import type { Logger } from '../core/logger';
+import type { Logger } from '../core/logger.js';
 
 export interface CreateBotOptions {
   token: string;

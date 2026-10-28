@@ -13,7 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { Logger } from '../core/logger';
+import type { Logger } from '../core/logger.js';
 
 export type Plan = 'padrao' | 'dono';
 

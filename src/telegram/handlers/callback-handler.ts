@@ -12,18 +12,21 @@
 
 import type { Context, Telegraf } from 'telegraf';
 
-import type { Logger } from '../../core/logger';
-import type { UserStore } from '../../data/user-store';
+import type { Logger } from '../../core/logger.js';
+import type { UserStore } from '../../data/user-store.js';
+import type { WhatsAppClient } from '../../whatsapp/client.js';
 import {
   screenContext,
   screenForCallback,
   type Screen,
   type ScreenContext,
-} from '../screens/screens';
+} from '../screens/screens.js';
 
 export interface CallbackHandlerDeps {
   logger: Logger;
   users: UserStore;
+  /** Fonte do estado real do WhatsApp, mostrado na tela correspondente. */
+  whatsapp?: Pick<WhatsAppClient, 'getStatus'>;
 }
 
 /**
@@ -61,7 +64,12 @@ export function isNotModified(error: unknown): boolean {
 function contextFor(ctx: Context, deps: CallbackHandlerDeps): ScreenContext {
   const userId = ctx.from?.id;
   const user = userId !== undefined ? deps.users.get(userId) ?? null : null;
-  const base = screenContext(user, ctx.from);
+  const base = {
+    ...screenContext(user, ctx.from),
+    // Tolerante a ausência: uma tela não pode derrubar a atualização inteira
+    // só porque a fonte de estado não foi injetada.
+    whatsapp: deps.whatsapp?.getStatus(),
+  };
 
   if (!deps.users.isOwner(userId)) {
     return base;

@@ -15,6 +15,7 @@ npm-debug.log*
 # Credenciais e sessões autenticadas do WhatsApp
 data/*
 !data/.gitkeep
+whatsapp-auth/
 auth_info*/
 *.session
 session/

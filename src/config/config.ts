@@ -8,8 +8,16 @@
  */
 
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { isLogLevel, type LogLevel } from '../core/logger';
+import { isLogLevel, type LogLevel } from '../core/logger.js';
+
+/** Raiz do projeto, resolvida a partir deste arquivo (não existe __dirname em ESM). */
+const PROJECT_ROOT_FROM_MODULE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
+);
 
 export interface Config {
   /** Token do bot do Telegram (obrigatório). */
@@ -26,7 +34,25 @@ export interface Config {
   rateLimitMax: number;
   /** Tamanho da janela do limite, em segundos. */
   rateLimitWindowSeconds: number;
+  /**
+   * Número do WhatsApp a parear, com código do país e só dígitos.
+   * Quando ausente, o WhatsApp fica desligado — nunca tenta conectar sozinho.
+   */
+  whatsappNumber?: string;
+  /** Código de pareamento de 8 caracteres, no alfabeto aceito pelo WhatsApp. */
+  whatsappPairingCode: string;
+  /** Onde a sessão autenticada do WhatsApp é gravada. Nunca vai para o Git. */
+  whatsappAuthDir: string;
 }
+
+/**
+ * Código de pareamento padrão da 𝐋𝐢𝐳𝐳𝐲.
+ *
+ * O WhatsApp só aceita 8 caracteres do alfabeto Crockford Base32
+ * (123456789ABCDEFGHJKLMNPQRSTVWXYZ), que não tem I, O, L nem símbolos.
+ * Por isso "lizz-ybot" é impossível; L1ZZYB9T é o mais próximo legível.
+ */
+export const DEFAULT_WHATSAPP_PAIRING_CODE = 'L1ZZYB9T';
 
 export interface LoadConfigOptions {
   env?: NodeJS.ProcessEnv;
@@ -109,9 +135,15 @@ export function parsePositiveInt(raw: string | undefined, fallback: number): num
   return Number.isInteger(valor) && valor > 0 ? valor : fallback;
 }
 
+/** Resolve o DATA_DIR do ambiente, ancorado na raiz do projeto. */
+function config_dataDir(env: NodeJS.ProcessEnv, projectRoot: string): string {
+  const bruto = (env.DATA_DIR ?? '').trim() || 'data';
+  return path.isAbsolute(bruto) ? bruto : path.resolve(projectRoot, bruto);
+}
+
 export function loadConfig(options: LoadConfigOptions = {}): Config {
   const env = options.env ?? process.env;
-  const projectRoot = options.projectRoot ?? path.resolve(__dirname, '..', '..');
+  const projectRoot = options.projectRoot ?? PROJECT_ROOT_FROM_MODULE;
 
   const rawToken = (env.TELEGRAM_BOT_TOKEN ?? '').trim();
   if (rawToken.length === 0 || rawToken === TOKEN_PLACEHOLDER) {
@@ -127,7 +159,13 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const rawMediaPath = (env.START_MEDIA_PATH ?? env.START_GIF_PATH ?? '').trim() || 'assets/start.mp4';
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
-  const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
+  const dataDir = config_dataDir(env, projectRoot);
+  const rawWhatsappNumber = (env.WHATSAPP_NUMBER ?? '').trim();
+  // Aceita só dígitos: o WhatsApp espera o número sem +, espaço ou traço.
+  const whatsappNumber = rawWhatsappNumber.replace(/\D/g, '');
+  const rawPairingCode = (env.WHATSAPP_PAIRING_CODE ?? '').trim().toUpperCase();
+  const whatsappPairingCode = rawPairingCode === '' ? DEFAULT_WHATSAPP_PAIRING_CODE : rawPairingCode;
+  const whatsappAuthDir = path.resolve(config_dataDir(env, projectRoot), 'whatsapp-auth');
   const rateLimitMax = parsePositiveInt(env.RATE_LIMIT_MAX, 20);
   const rateLimitWindowSeconds = parsePositiveInt(env.RATE_LIMIT_WINDOW_SECONDS, 60);
   const rawOwnerId = (env.OWNER_TELEGRAM_ID ?? '').trim();
@@ -141,9 +179,12 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
       ? rawMediaPath
       : path.resolve(projectRoot, rawMediaPath),
     logLevel,
-    dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),
+    dataDir,
     ownerTelegramId,
     rateLimitMax,
     rateLimitWindowSeconds,
+    whatsappNumber: whatsappNumber === '' ? undefined : whatsappNumber,
+    whatsappPairingCode,
+    whatsappAuthDir,
   };
 }

@@ -7,9 +7,15 @@
  */
 
 import { Markup } from 'telegraf';
-import type { InlineKeyboardMarkup } from 'telegraf/typings/core/types/typegram';
 
-import type { Plan, StoreStats, TelegramUserLike, UserRecord } from '../../data/user-store';
+/**
+ * Tipo do teclado inline. Derivado do próprio Markup para não depender de
+ * caminhos internos do Telegraf, que não resolvem em ESM.
+ */
+type InlineKeyboardMarkup = ReturnType<typeof Markup.inlineKeyboard>['reply_markup'];
+
+import type { Plan, StoreStats, TelegramUserLike, UserRecord } from '../../data/user-store.js';
+import type { WhatsAppStatus } from '../../whatsapp/client.js';
 
 /** Identificadores estáveis de callback. Nunca reaproveite um valor antigo. */
 export const CALLBACKS = {
@@ -47,6 +53,8 @@ export interface ScreenContext {
   telegramUser?: TelegramUserLike;
   /** Nome já resolvido para exibição. */
   displayName: string;
+  /** Estado real da conexão do WhatsApp, para a tela correspondente. */
+  whatsapp?: WhatsAppStatus;
   /**
    * Dados de administração. Só é preenchido quando quem navega é o dono, e
    * quem decide isso é o servidor — nunca o payload do callback.
@@ -322,6 +330,39 @@ export function buildAdminUsersCaption(context: ScreenContext): string {
   ].join('\n');
 }
 
+/**
+ * Rótulo legível de cada estado do WhatsApp.
+ *
+ * A tela nunca afirma "conectado" sem conexão real: o texto vem do estado que
+ * o cliente reporta, não de uma suposição.
+ */
+export const WHATSAPP_STATE_LABELS: Record<WhatsAppStatus['state'], string> = {
+  desligado: '🔴 Desligado',
+  conectando: '🟡 Conectando',
+  aguardando_pareamento: '🟡 Aguardando pareamento',
+  conectado: '🟢 Conectado',
+  erro: '🔴 Erro',
+};
+
+/** Legenda da tela do WhatsApp, com o estado real da conexão. */
+export function buildWhatsappCaption(context: ScreenContext): string {
+  const status = context.whatsapp;
+  if (!status) {
+    return [
+      '📱 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
+      '',
+      'Estado indisponível no momento.',
+    ].join('\n');
+  }
+  return [
+    '📱 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
+    '',
+    `♛ 𝐄𝐬𝐭𝐚𝐝𝐨: ${WHATSAPP_STATE_LABELS[status.state]}`,
+    '',
+    `✦ ${escapeHtml(status.summary)}`,
+  ].join('\n');
+}
+
 /** As telas internas compartilham o botão de voltar. */
 export const SCREENS: Record<ScreenId, Screen> = {
   menu: {
@@ -347,13 +388,7 @@ export const SCREENS: Record<ScreenId, Screen> = {
   },
   whatsapp: {
     id: 'whatsapp',
-    buildCaption: () =>
-      [
-        '📱 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
-        '',
-        'Módulo em preparação.',
-        'A integração com o WhatsApp ainda não foi implementada e nenhuma conexão real foi validada até o momento.',
-      ].join('\n'),
+    buildCaption: buildWhatsappCaption,
     buildKeyboard: fixedKeyboard(backKeyboard),
   },
   about: {

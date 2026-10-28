@@ -1,14 +1,15 @@
 import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
 import {
   ConfigError,
   DEFAULT_OWNER_TELEGRAM_ID,
   loadConfig,
-} from '../src/config/config';
+} from '../src/config/config.js';
 
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('loadConfig', () => {
   it('falha com mensagem clara quando o token está ausente', () => {
