@@ -19,6 +19,8 @@ export interface Config {
   telegramBotToken: string;
   /** Caminho do GIF do menu, relativo à raiz do projeto ou absoluto. */
   startGifPath: string;
+  /** Caminho do MP4 do menu (opcional). Enviado como animação sem reencodagem. */
+  startMp4Path: string;
   /** animation = mídia em loop no balão; document = arquivo .gif anexado. */
   startMediaMode: StartMediaMode;
   /** Nível de log efetivo. */
@@ -102,6 +104,7 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   }
 
   const rawGifPath = (env.START_GIF_PATH ?? '').trim() || 'assets/start.gif';
+  const rawMp4Path = (env.START_MP4_PATH ?? '').trim() || 'assets/start.mp4';
   const rawMediaMode = (env.START_MEDIA_MODE ?? '').trim().toLowerCase();
   const startMediaMode: StartMediaMode = rawMediaMode === 'document' ? 'document' : 'animation';
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
@@ -111,6 +114,7 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   return {
     telegramBotToken: rawToken,
     startGifPath: path.isAbsolute(rawGifPath) ? rawGifPath : path.resolve(projectRoot, rawGifPath),
+    startMp4Path: path.isAbsolute(rawMp4Path) ? rawMp4Path : path.resolve(projectRoot, rawMp4Path),
     startMediaMode,
     logLevel,
     dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),

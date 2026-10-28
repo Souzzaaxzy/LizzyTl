@@ -101,6 +101,9 @@ LOG_LEVEL=info
   com uma mensagem explicando como configurá-lo, sem imprimir o token.
 - `START_GIF_PATH` é opcional e aceita caminho relativo à raiz do projeto ou
   absoluto. O valor padrão é `assets/start.gif`.
+- `START_MP4_PATH` é o caminho do MP4 do menu. No modo `animation` ele tem
+  prioridade sobre o GIF, porque o Telegram usa o arquivo como está, sem
+  reencodar. O valor padrão é `assets/start.mp4`.
 - `START_MEDIA_MODE` controla como a mídia é enviada:
   - `animation` (padrão): a mídia roda sozinha, em loop infinito, dentro do
     balão da mensagem. É o comportamento de GIF que o Telegram exibe no chat.
@@ -113,26 +116,37 @@ LOG_LEVEL=info
 
 ## Localização do GIF
 
-O GIF do menu já está em `assets/start.gif` (540x300, 10 fps, loop infinito,
-~2,6 MB), gerado a partir do vídeo MP4 fornecido. O caminho é configurável por
-`START_GIF_PATH`, então o GIF pode ser trocado sem alterar a lógica do `/start`.
+O menu usa dois arquivos, ambos já presentes no repositório:
 
-Sobre o formato de envio: o Telegram não exibe GIF como GIF solto. Ele
-normaliza a mídia em loop para MP4 internamente (a classe `Animation` da API é
-definida como "GIF ou H.264/MPEG-4 AVC video"). O método `sendAnimation` é o
-que produz a mídia rodando em loop no balão, que é o comportamento desejado.
-Se precisar do arquivo `.gif` como anexo, use `START_MEDIA_MODE=document`.
+| Arquivo | Tamanho | Papel |
+| --- | --- | --- |
+| `assets/start.mp4` | 293 KB | Preferido no modo `animation` |
+| `assets/start.gif` | 2,6 MB | Alternativa e modo `document` |
 
-Se o arquivo não existir, o bot **não encerra e não gera erro sem explicação**:
-ele registra um aviso no log e envia a legenda com os botões, sem o GIF. Ao
-adicionar o arquivo, o envio volta automaticamente ao formato normal.
+Por que o MP4 é preferido: o Telegram não exibe GIF como GIF. Ele reencoda a
+mídia para MP4 antes de exibir como animação, e nessa reencodagem o loop pode
+se perder. Enviando um MP4 H.264 já pronto, sem áudio, o Telegram usa o arquivo
+como está e a animação roda em loop, sem reencodagem.
 
-Para regerar o GIF a partir de outro vídeo (requer `ffmpeg` e `gifsicle`):
+A escolha é automática: no modo `animation` o MP4 é usado se existir; se não
+existir, o GIF é usado. No modo `document` a ordem se inverte. Os caminhos são
+configuráveis por `START_MP4_PATH` e `START_GIF_PATH`.
+
+Para regerar os arquivos a partir de um vídeo de origem (requer `ffmpeg`):
 
 ```bash
-ffmpeg -i origem.mp4 -vf "fps=10,scale=540:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" -loop 0 assets/start.gif
-gifsicle -O3 --careful assets/start.gif -o assets/start.gif
+# MP4 para animação: H.264, sem áudio, pixel format yuv420p
+ffmpeg -y -i origem.mp4 -c:v libx264 -pix_fmt yuv420p -profile:v main -crf 20 -an \
+  -movflags +faststart assets/start.mp4
+
+# GIF alternativo, com paleta própria para evitar quadriculado
+ffmpeg -y -i origem.mp4 -vf "fps=10,scale=540:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" -loop 0 assets/start.gif
 ```
+
+Se nenhum dos dois arquivos existir, o bot **não encerra e não gera erro sem
+explicação**: ele registra um aviso no log e envia a legenda com os botões, sem
+a mídia. Ao adicionar o arquivo, o envio volta automaticamente ao formato
+normal.
 
 ## Comandos para iniciar e compilar
 
