@@ -8,16 +8,16 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import type { Telegraf } from 'telegraf';
 
 import type { Config } from '../../config/config';
 import type { Logger } from '../../core/logger';
 import { buildMainMenuKeyboard, buildStartCaption } from '../menus/main-menu';
-import { resolveStartMedia } from '../media/start-media';
 
 export interface StartCommandDeps {
-  config: Pick<Config, 'startGifPath' | 'startMp4Path' | 'startMediaMode'>;
+  config: Pick<Config, 'startGifPath'>;
   logger: Logger;
 }
 
@@ -49,15 +49,16 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     const caption = buildStartCaption(displayName);
     const keyboard = buildMainMenuKeyboard();
 
-    // Escolhe o arquivo disponível (MP4 tem prioridade no modo animação) e
-    // informa o nome real, para o Telegram não tratar a animação como vídeo.
-    const media = resolveStartMedia({ config: deps.config });
+    // Envia a mídia do menu junto com a legenda e os botões, tudo em uma única
+    // mensagem. O caminho é configurável e a existência é checada a cada
+    // execução, para que adicionar o arquivo restaure o formato normal.
+    const mediaPath = deps.config.startGifPath;
 
-    if (media === null) {
+    if (!fs.existsSync(mediaPath)) {
       logger.warn(
-        `Nenhuma mídia do menu encontrada em "${deps.config.startMp4Path}" nem em ` +
-          `"${deps.config.startGifPath}". Enviando a mensagem com os botões sem a mídia. ` +
-          'Adicione um dos arquivos para restaurar o formato normal.',
+        `Mídia do menu não encontrada em "${mediaPath}". ` +
+          'Enviando a mensagem com os botões sem a mídia. ' +
+          'Adicione o arquivo nesse caminho para restaurar o formato normal.',
       );
       await ctx.reply(caption, {
         parse_mode: 'HTML',
@@ -66,25 +67,21 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
       return;
     }
 
-    const file = {
-      source: fs.createReadStream(media.filePath),
-      filename: media.filename,
-    };
-    const extra = {
-      caption,
-      parse_mode: 'HTML' as const,
-      reply_markup: keyboard,
-    };
-
     try {
-      // sendAnimation e o metodo que faz a midia rodar sozinha, em loop
-      // infinito, dentro do balao. Enviando um MP4 H.264 sem audio, o Telegram
-      // usa o arquivo como esta, sem reencodar, e o loop se mantem.
-      if (media.kind === 'document') {
-        await ctx.replyWithDocument(file, extra);
-      } else {
-        await ctx.replyWithAnimation(file, extra);
-      }
+      // sendAnimation exibe a mídia rodando sozinha, em loop, dentro do balão.
+      // O filename informa a extensão real, para o Telegram não tratar o
+      // arquivo como vídeo comum.
+      await ctx.replyWithAnimation(
+        {
+          source: fs.createReadStream(mediaPath),
+          filename: path.basename(mediaPath),
+        },
+        {
+          caption,
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        },
+      );
     } catch (error) {
       logger.error('Falha ao enviar o GIF do menu; enviando a mensagem sem o GIF.', error);
       await ctx.reply(caption, {

@@ -127,8 +127,6 @@ describe('comando /start (sem GIF disponível)', () => {
     registerStartCommand(bot, {
       config: {
         startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
-        startMp4Path: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
-        startMediaMode: 'animation',
       },
       logger: silentLogger,
     });
@@ -151,8 +149,6 @@ describe('comando /start (sem GIF disponível)', () => {
     registerStartCommand(bot, {
       config: {
         startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
-        startMp4Path: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
-        startMediaMode: 'animation',
       },
       logger: silentLogger,
     });
@@ -169,14 +165,11 @@ describe('comando /start (sem GIF disponível)', () => {
 describe('comando /start (com GIF disponível)', () => {
   let tmpDir: string;
   let gifPath: string;
-  let mp4Path: string;
 
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-gif-'));
     gifPath = path.join(tmpDir, 'start.gif');
-    mp4Path = path.join(tmpDir, 'start.mp4');
     fs.writeFileSync(gifPath, MINIMAL_GIF);
-    fs.writeFileSync(mp4Path, Buffer.from('00000018667479706d703432', 'hex'));
     // O Telegraf abre o arquivo de forma preguiçosa; remover no fim do processo
     // evita corrida entre a leitura do stream e a limpeza do diretório.
     process.once('exit', () => {
@@ -187,7 +180,7 @@ describe('comando /start (com GIF disponível)', () => {
   it('envia a mídia em loop (sendAnimation) com legenda e botões na MESMA mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
-      config: { startGifPath: gifPath, startMp4Path: mp4Path, startMediaMode: 'animation' },
+      config: { startGifPath: gifPath },
       logger: silentLogger,
     });
     const calls = stubTelegram();
@@ -202,57 +195,19 @@ describe('comando /start (com GIF disponível)', () => {
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
 
-  it('prefere o MP4 no modo animação, sem reencodagem pelo Telegram', async () => {
+  it('envia a mídia com o nome real do arquivo', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, {
-      config: { startGifPath: gifPath, startMp4Path: mp4Path, startMediaMode: 'animation' },
-      logger: silentLogger,
-    });
+    registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
     const calls = stubTelegram();
 
-    await bot.handleUpdate(startUpdate(4, { id: 11, username: 'mp4_user' }));
+    await bot.handleUpdate(startUpdate(4, { id: 11, username: 'midia' }));
 
     const anim = calls.find((call) => call.method === 'sendAnimation')?.payload
       .animation as { filename?: string } | undefined;
     assert.ok(anim, 'deve enviar como animação');
-    assert.equal(anim.filename, 'start.mp4');
+    assert.equal(anim.filename, 'start.gif');
   });
 
-  it('usa o GIF no modo animação quando o MP4 não existe', async () => {
-    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, {
-      config: {
-        startGifPath: gifPath,
-        startMp4Path: path.join(os.tmpdir(), 'lizzy-sem-mp4.mp4'),
-        startMediaMode: 'animation',
-      },
-      logger: silentLogger,
-    });
-    const calls = stubTelegram();
-
-    await bot.handleUpdate(startUpdate(6, { id: 13, username: 'so_gif' }));
-
-    const anim = calls.find((call) => call.method === 'sendAnimation')?.payload
-      .animation as { filename?: string } | undefined;
-    assert.equal(anim?.filename, 'start.gif');
-  });
-
-  it('permite enviar como documento .gif quando configurado', async () => {
-    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, {
-      config: { startGifPath: gifPath, startMp4Path: mp4Path, startMediaMode: 'document' },
-      logger: silentLogger,
-    });
-    const calls = stubTelegram();
-
-    await bot.handleUpdate(startUpdate(5, { id: 12, username: 'gif_doc' }));
-
-    const sends = calls.filter((call) => call.method !== 'getMe');
-    assert.equal(sends.length, 1);
-    assert.equal(sends[0]?.method, 'sendDocument');
-    const doc = sends[0]?.payload.document as { filename?: string } | undefined;
-    assert.equal(doc?.filename, 'start.gif');
-  });
 });
 
 describe('callbacks do menu', () => {
