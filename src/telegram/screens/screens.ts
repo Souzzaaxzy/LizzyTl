@@ -27,11 +27,11 @@ export const CALLBACKS = {
   WA_CONNECT: 'wa_connect',
   WA_DISCONNECT: 'wa_disconnect',
   MENU_TOOLS: 'menu_tools',
-  TOOL_INSTAGRAM: 'tool_instagram',
-  TOOL_YOUTUBE: 'tool_youtube',
-  TOOL_FACEBOOK: 'tool_facebook',
-  TOOL_X: 'tool_x',
-  TOOL_TIKTOK: 'tool_tiktok',
+  TOOL_FLOODP: 'tool_floodp',
+  TOOL_FLOODGHOST: 'tool_floodghost',
+  TOOL_STATUS: 'tool_status',
+  TOOL_multi: 'tool_multi',
+  TOOL_CONFIG: 'tool_config',
   ADMIN_HOME: 'admin_home',
   ADMIN_STATS: 'admin_stats',
   ADMIN_USERS: 'admin_users',
@@ -46,10 +46,10 @@ export type ScreenId =
   | 'whatsapp'
   | 'about'
   | 'tools'
-  | 'toolInstagram'
-  | 'toolYoutube'
-  | 'toolFacebook'
-  | 'toolX'
+  | 'toolfloodp' 
+  | 'toolfloodghost'
+  | 'toolstatus'
+  | 'toolmulti'
   | 'toolTiktok'
   | 'admin'
   | 'adminStats'
@@ -501,11 +501,11 @@ export const SCREENS: Record<ScreenId, Screen> = {
       ].join('\n'),
     buildKeyboard: fixedKeyboard(buildToolsKeyboard),
   },
-  toolInstagram: toolScreen('toolInstagram', '📸 𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐩𝐨𝐬𝐭𝐬, 𝐑𝐞𝐞𝐥𝐬 𝐞 𝐒𝐭𝐨𝐫𝐢𝐞𝐬.'),
-  toolYoutube: toolScreen('toolYoutube', '▶️ 𝐘𝐨𝐮𝐓𝐮𝐛𝐞', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬 𝐞 𝐒𝐡𝐨𝐫𝐭𝐬.'),
-  toolFacebook: toolScreen('toolFacebook', '📘 𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬.'),
-  toolX: toolScreen('toolX', '✖️ 𝐗', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬.'),
-  toolTiktok: toolScreen('toolTiktok', '🎵 𝐓𝐢𝐤𝐓𝐨𝐤', '𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝 𝐝𝐞 𝐯𝐢́𝐝𝐞𝐨𝐬 𝐬𝐞𝐦 𝐦𝐚𝐫𝐜𝐚 𝐝\'𝐚́𝐠𝐮𝐚.'),
+  toolfloodp: toolScreen('toolfloodp', '💸 FloodPayemnt', 'Flood de payment.'),
+  toolfloodghost: toolScreen('toolfloodghost', '👻 FloodFantasma', 'Flood com mensagens fantasmas.'),
+  toolstatus: toolScreen('toolstatus', '📡 FloodStatus', 'Flood em status.'),
+  toolmulti: toolScreen('toolmulti', '👾 FloodMulti', 'Flood fantasma com status'),
+  toolconfig: toolScreen('toolconfig', '⚙️ Config', 'Config Flood'),
   admin: {
     id: 'admin',
     ownerOnly: true,
@@ -545,16 +545,16 @@ export function screenForCallback(callbackData: string): Screen | undefined {
       return SCREENS.about;
     case CALLBACKS.MENU_TOOLS:
       return SCREENS.tools;
-    case CALLBACKS.TOOL_INSTAGRAM:
-      return SCREENS.toolInstagram;
-    case CALLBACKS.TOOL_YOUTUBE:
-      return SCREENS.toolYoutube;
-    case CALLBACKS.TOOL_FACEBOOK:
-      return SCREENS.toolFacebook;
-    case CALLBACKS.TOOL_X:
-      return SCREENS.toolX;
-    case CALLBACKS.TOOL_TIKTOK:
-      return SCREENS.toolTiktok;
+    case CALLBACKS.TOOL_FLOODP:
+      return SCREENS.toolfloodp;
+    case CALLBACKS.TOOL_FLOODGHOST:
+      return SCREENS.toolfloodghost;
+    case CALLBACKS.TOOL_STATUS:
+      return SCREENS.toolstatus;
+    case CALLBACKS.TOOL_MULTI:
+      return SCREENS.toolmulti;
+    case CALLBACKS.TOOL_CONFIG:
+      return SCREENS.toolconfig;
     case CALLBACKS.ADMIN_HOME:
       return SCREENS.admin;
     case CALLBACKS.ADMIN_STATS:
