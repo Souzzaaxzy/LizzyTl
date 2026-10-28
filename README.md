@@ -16,7 +16,7 @@ funcionalidade foi implementada nesta fase.
 - [Requisitos](#requisitos)
 - [Instalação no Termux](#instalação-no-termux)
 - [Configuração do token](#configuração-do-token)
-- [Localização do GIF](#localização-do-gif)
+- [Localização da mídia](#localização-da-mídia)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
 - [Como executar os testes](#como-executar-os-testes)
 - [Solução para problemas comuns](#solução-para-problemas-comuns)
@@ -31,8 +31,8 @@ funcionalidade foi implementada nesta fase.
 Ao enviar `/start`, a Lizzy:
 
 1. identifica o usuário e monta uma saudação personalizada;
-2. envia o GIF do menu (`assets/start.gif`) **com a legenda e os botões inline
-   na mesma mensagem**;
+2. envia a mídia do menu (`assets/start.mp4`) **com a legenda e os botões
+   inline na mesma mensagem**;
 3. apresenta quatro botões organizados em duas colunas.
 
 Representação ilustrativa do menu (os botões reais são inline da API do Telegram):
@@ -93,35 +93,32 @@ O arquivo `.env` (não versionado) deve conter:
 
 ```env
 TELEGRAM_BOT_TOKEN=seu-token-aqui
-START_GIF_PATH=assets/start.gif
+START_MEDIA_PATH=assets/start.mp4
 LOG_LEVEL=info
 ```
 
 - `TELEGRAM_BOT_TOKEN` é **obrigatório**. Se estiver ausente, o processo encerra
   com uma mensagem explicando como configurá-lo, sem imprimir o token.
-- `START_GIF_PATH` é opcional e aceita caminho relativo à raiz do projeto ou
-  absoluto. O valor padrão é `assets/start.gif`.
+- `START_MEDIA_PATH` é o caminho da mídia do menu. Aceita caminho relativo à
+  raiz do projeto ou absoluto. O valor padrão é `assets/start.mp4`.
 - `LOG_LEVEL` aceita `error`, `warn`, `info` ou `debug`. Valores inválidos
   assumem `info`.
 - `DATA_DIR` é opcional e reserva um diretório para dados locais privados
   (futuras sessões do WhatsApp). Não é versionado.
 
-## Localização do GIF
+## Localização da mídia
 
-O menu usa um único arquivo de mídia em `assets/start.gif` (540x300, 10 fps,
-loop infinito). O caminho é configurável por `START_GIF_PATH`, então o arquivo
-pode ser trocado sem alterar a lógica do `/start`.
+A mídia do menu fica em `assets/start.mp4`. O caminho é configurável por
+`START_MEDIA_PATH`, então o arquivo pode ser trocado sem alterar a lógica do
+`/start`.
 
 O envio usa `sendAnimation`, que exibe a mídia rodando sozinha, em loop, dentro
 do balão da mensagem. A legenda e os botões vão na mesma mensagem.
 
-Para regerar o arquivo a partir de um vídeo de origem (requer `ffmpeg`):
-
-```bash
-ffmpeg -y -i origem.mp4 \
-  -vf "fps=10,scale=540:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a:diff_mode=rectangle" \
-  -loop 0 assets/start.gif
-```
+Se o arquivo não existir, o bot **não encerra e não gera erro sem explicação**:
+ele registra um aviso no log com o caminho onde procurou e envia a legenda com
+os botões, sem a mídia. Ao adicionar o arquivo, o envio volta automaticamente
+ao formato normal.
 
 ## Comandos para iniciar e compilar
 
@@ -141,7 +138,7 @@ npm test
 
 Os testes usam `node:test` e substituem as chamadas HTTP do Telegram por um
 gravador, então **não é necessária uma conexão real com o Telegram**. Eles
-cobrem: token ausente, GIF ausente, GIF presente, saudação com e sem username,
+cobrem: token ausente, mídia ausente, mídia presente, saudação com e sem username,
 disposição e callbacks dos quatro botões, callbacks inválidos e ausência de
 segredos nas mensagens de erro.
 
@@ -171,8 +168,9 @@ segredos nas mensagens de erro.
   o @BotFather.
 - **`409 Conflict`** — existe outra instância do mesmo bot em execução. Encerre
   a outra sessão.
-- **A mensagem chega sem o GIF** — o arquivo não existe no caminho configurado.
-  Confira `START_GIF_PATH` e o arquivo em `assets/`.
+- **A mensagem chega sem a mídia** — o arquivo não existe no caminho
+  configurado. Confira `START_MEDIA_PATH` e o arquivo em `assets/`. O log
+  mostra o caminho exato onde o bot procurou.
 - **`tsx: command not found`** — execute `npm install` novamente.
 - **O bot para quando o Termux fica em segundo plano** — o Android suspende
   processos em segundo plano. Não há garantia de execução contínua no Android;
@@ -210,7 +208,7 @@ declara que o WhatsApp está conectado.
 │   │   └── handlers/callback-handler.ts # tratamento dos callbacks inline
 │   └── whatsapp/client.ts           # ponto de integração futura (sem conexão)
 ├── tests/                           # testes automatizados (node:test)
-├── assets/                          # contém start.gif (não versionado)
+├── assets/                          # contém start.mp4
 ├── data/                            # dados locais privados (não versionado)
 ├── .env.example
 ├── package.json

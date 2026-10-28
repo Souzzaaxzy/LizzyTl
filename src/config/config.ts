@@ -4,7 +4,7 @@
  * Regras de segurança aplicadas aqui:
  * - O token nunca é impresso nem incluído em mensagens de erro.
  * - Variáveis obrigatórias são validadas na inicialização com mensagem clara.
- * - O caminho do GIF é configurável por ambiente, sem tocar na lógica do /start.
+ * - O caminho da mídia é configurável por ambiente, sem tocar na lógica do /start.
  */
 
 import * as path from 'node:path';
@@ -15,7 +15,7 @@ export interface Config {
   /** Token do bot do Telegram (obrigatório). */
   telegramBotToken: string;
   /** Caminho da mídia do menu, relativo à raiz do projeto ou absoluto. */
-  startGifPath: string;
+  startMediaPath: string;
   /** Nível de log efetivo. */
   logLevel: LogLevel;
   /** Diretório usado para dados locais privados (sessões futuras do WhatsApp). */
@@ -96,14 +96,16 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     );
   }
 
-  const rawGifPath = (env.START_GIF_PATH ?? '').trim() || 'assets/start.gif';
+  const rawMediaPath = (env.START_MEDIA_PATH ?? env.START_GIF_PATH ?? '').trim() || 'assets/start.mp4';
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
   const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
 
   return {
     telegramBotToken: rawToken,
-    startGifPath: path.isAbsolute(rawGifPath) ? rawGifPath : path.resolve(projectRoot, rawGifPath),
+    startMediaPath: path.isAbsolute(rawMediaPath)
+      ? rawMediaPath
+      : path.resolve(projectRoot, rawMediaPath),
     logLevel,
     dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),
   };

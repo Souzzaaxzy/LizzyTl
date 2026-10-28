@@ -30,31 +30,31 @@ describe('loadConfig', () => {
     );
   });
 
-  it('usa o caminho padrão assets/start.gif quando START_GIF_PATH não é definido', () => {
+  it('usa o caminho padrão assets/start.mp4 quando START_MEDIA_PATH não é definido', () => {
     const config = loadConfig({
       env: { TELEGRAM_BOT_TOKEN: '123:ABC' },
       projectRoot: PROJECT_ROOT,
     });
-    assert.equal(config.startGifPath, path.join(PROJECT_ROOT, 'assets', 'start.gif'));
+    assert.equal(config.startMediaPath, path.join(PROJECT_ROOT, 'assets', 'start.mp4'));
     assert.equal(config.logLevel, 'info');
   });
 
-  it('permite configurar o caminho do GIF sem alterar a lógica do comando', () => {
+  it('permite configurar o caminho da mídia sem alterar a lógica do comando', () => {
     const config = loadConfig({
-      env: { TELEGRAM_BOT_TOKEN: '123:ABC', START_GIF_PATH: 'assets/outro.gif', LOG_LEVEL: 'debug' },
+      env: { TELEGRAM_BOT_TOKEN: '123:ABC', START_MEDIA_PATH: 'assets/outro.mp4', LOG_LEVEL: 'debug' },
       projectRoot: PROJECT_ROOT,
     });
-    assert.equal(config.startGifPath, path.join(PROJECT_ROOT, 'assets', 'outro.gif'));
+    assert.equal(config.startMediaPath, path.join(PROJECT_ROOT, 'assets', 'outro.mp4'));
     assert.equal(config.logLevel, 'debug');
   });
 
   it('respeita caminhos absolutos e ignora níveis de log inválidos', () => {
-    const absolute = path.resolve(PROJECT_ROOT, 'assets', 'start.gif');
+    const absolute = path.resolve(PROJECT_ROOT, 'assets', 'start.mp4');
     const config = loadConfig({
-      env: { TELEGRAM_BOT_TOKEN: '123:ABC', START_GIF_PATH: absolute, LOG_LEVEL: 'verboso' },
+      env: { TELEGRAM_BOT_TOKEN: '123:ABC', START_MEDIA_PATH: absolute, LOG_LEVEL: 'verboso' },
       projectRoot: PROJECT_ROOT,
     });
-    assert.equal(config.startGifPath, absolute);
+    assert.equal(config.startMediaPath, absolute);
     assert.equal(config.logLevel, 'info');
   });
 

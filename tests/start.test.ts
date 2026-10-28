@@ -17,11 +17,8 @@ interface RecordedCall {
   payload: Record<string, unknown>;
 }
 
-/** GIF 1x1 mínimo (GIF89a), usado apenas como fixture temporária de teste. */
-const MINIMAL_GIF = Buffer.from(
-  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-  'base64',
-);
+/** Cabeçalho mínimo de arquivo MP4, usado apenas como fixture temporária. */
+const MINIMAL_MP4 = Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex');
 
 const silentLogger = createLogger('error');
 
@@ -121,12 +118,12 @@ describe('resolveDisplayName', () => {
   });
 });
 
-describe('comando /start (sem GIF disponível)', () => {
+describe('comando /start (sem mídia disponível)', () => {
   it('envia legenda e os quatro botões em UMA única mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
       config: {
-        startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
+        startMediaPath: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
       },
       logger: silentLogger,
     });
@@ -148,7 +145,7 @@ describe('comando /start (sem GIF disponível)', () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
       config: {
-        startGifPath: path.join(os.tmpdir(), 'lizzy-inexistente.gif'),
+        startMediaPath: path.join(os.tmpdir(), 'lizzy-inexistente.mp4'),
       },
       logger: silentLogger,
     });
@@ -162,14 +159,14 @@ describe('comando /start (sem GIF disponível)', () => {
   });
 });
 
-describe('comando /start (com GIF disponível)', () => {
+describe('comando /start (com mídia disponível)', () => {
   let tmpDir: string;
-  let gifPath: string;
+  let mediaPath: string;
 
   before(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-gif-'));
-    gifPath = path.join(tmpDir, 'start.gif');
-    fs.writeFileSync(gifPath, MINIMAL_GIF);
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-media-'));
+    mediaPath = path.join(tmpDir, 'start.mp4');
+    fs.writeFileSync(mediaPath, MINIMAL_MP4);
     // O Telegraf abre o arquivo de forma preguiçosa; remover no fim do processo
     // evita corrida entre a leitura do stream e a limpeza do diretório.
     process.once('exit', () => {
@@ -180,24 +177,24 @@ describe('comando /start (com GIF disponível)', () => {
   it('envia a mídia em loop (sendAnimation) com legenda e botões na MESMA mensagem', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, {
-      config: { startGifPath: gifPath },
+      config: { startMediaPath: mediaPath },
       logger: silentLogger,
     });
     const calls = stubTelegram();
 
-    await bot.handleUpdate(startUpdate(3, { id: 9, username: 'gif_user' }));
+    await bot.handleUpdate(startUpdate(3, { id: 9, username: 'media_user' }));
 
     const sends = calls.filter((call) => call.method !== 'getMe');
     assert.equal(sends.length, 1, 'mídia, legenda e botões devem ir em uma única mensagem');
     assert.equal(sends[0]?.method, 'sendAnimation');
-    assert.match(String(sends[0]?.payload.caption), /@gif_user/);
+    assert.match(String(sends[0]?.payload.caption), /@media_user/);
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
 
   it('envia a mídia com o nome real do arquivo', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
+    registerStartCommand(bot, { config: { startMediaPath: mediaPath }, logger: silentLogger });
     const calls = stubTelegram();
 
     await bot.handleUpdate(startUpdate(4, { id: 11, username: 'midia' }));
@@ -205,7 +202,7 @@ describe('comando /start (com GIF disponível)', () => {
     const anim = calls.find((call) => call.method === 'sendAnimation')?.payload
       .animation as { filename?: string } | undefined;
     assert.ok(anim, 'deve enviar como animação');
-    assert.equal(anim.filename, 'start.gif');
+    assert.equal(anim.filename, 'start.mp4');
   });
 
 });

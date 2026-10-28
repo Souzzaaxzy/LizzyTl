@@ -1,10 +1,10 @@
 /**
  * Comando /start da 𝐋𝐢𝐳𝐳𝐲 𝐝𝐨 𝐩𝐫𝐢𝐯𝐲.
  *
- * Requisito central: GIF, legenda e botões inline devem chegar ao usuário em
- * UMA única mensagem. Por isso o envio é feito com sendAnimation (que aceita
- * legenda e reply_markup) e, na ausência do arquivo, cai para uma única
- * mensagem de texto com os mesmos botões.
+ * Requisito central: mídia, legenda e botões inline devem chegar ao usuário em
+ * UMA única mensagem. O envio usa sendAnimation, que aceita legenda e
+ * reply_markup, e na ausência do arquivo cai para uma mensagem de texto com os
+ * mesmos botões.
  */
 
 import * as fs from 'node:fs';
@@ -17,7 +17,7 @@ import type { Logger } from '../../core/logger';
 import { buildMainMenuKeyboard, buildStartCaption } from '../menus/main-menu';
 
 export interface StartCommandDeps {
-  config: Pick<Config, 'startGifPath'>;
+  config: Pick<Config, 'startMediaPath'>;
   logger: Logger;
 }
 
@@ -52,7 +52,7 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     // Envia a mídia do menu junto com a legenda e os botões, tudo em uma única
     // mensagem. O caminho é configurável e a existência é checada a cada
     // execução, para que adicionar o arquivo restaure o formato normal.
-    const mediaPath = deps.config.startGifPath;
+    const mediaPath = deps.config.startMediaPath;
 
     if (!fs.existsSync(mediaPath)) {
       logger.warn(
@@ -83,7 +83,7 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
         },
       );
     } catch (error) {
-      logger.error('Falha ao enviar o GIF do menu; enviando a mensagem sem o GIF.', error);
+      logger.error('Falha ao enviar a mídia do menu; enviando a mensagem sem ela.', error);
       await ctx.reply(caption, {
         parse_mode: 'HTML',
         reply_markup: keyboard,
