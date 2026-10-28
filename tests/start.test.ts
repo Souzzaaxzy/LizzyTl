@@ -318,7 +318,7 @@ describe('navegação por callbacks', () => {
     assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
     const edit = calls.find((c) => c.method === 'editMessageCaption');
     assert.ok(edit, 'deve editar a mensagem em vez de enviar outra');
-    assert.match(String(edit?.payload.caption), /𝐈𝐃: 7001/);
+    assert.match(String(edit?.payload.caption), /𝐈𝐃: <code>7001<\/code>/);
     assert.equal(
       calls.some((c) => c.method === 'sendMessage'),
       false,

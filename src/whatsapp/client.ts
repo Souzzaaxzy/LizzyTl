@@ -55,6 +55,13 @@ export interface WhatsAppClientDeps {
   loadModule?: () => Promise<BaileysModule>;
   /** Avisa quando o pareamento está pronto, para o bot mandar o código no chat. */
   onPairingCode?: (code: string) => void;
+  /**
+   * Avisa quando o estado muda, para o bot informar no chat.
+   *
+   * Recebe o estado novo e um texto opcional. O cliente não conhece o
+   * Telegram: quem transforma isso em mensagem é o index.
+   */
+  onStateChange?: (state: WhatsAppState, detalhe?: string) => void;
 }
 
 /** Logger silencioso: o Baileys é muito verboso e poluiria o log da Lizzy. */
@@ -100,6 +107,9 @@ export class WhatsAppClient {
   private readonly loadModule: () => Promise<BaileysModule>;
   private readonly session: WhatsappSession;
   private readonly onPairingCode: ((code: string) => void) | undefined;
+  private readonly onStateChange:
+    | ((state: WhatsAppState, detalhe?: string) => void)
+    | undefined;
   private socket: BaileysSocket | null = null;
   private status: WhatsAppStatus = { state: 'desligado', summary: 'Desligado.' };
   private parado = false;
@@ -116,6 +126,7 @@ export class WhatsAppClient {
     this.loadModule = deps.loadModule ?? loadBaileys;
     this.session = deps.session;
     this.onPairingCode = deps.onPairingCode;
+    this.onStateChange = deps.onStateChange;
   }
 
   /** Estado atual, para a tela do menu. */
@@ -133,8 +144,14 @@ export class WhatsAppClient {
     return this.numeroAtual;
   }
 
-  private setStatus(state: WhatsAppState, summary: string): void {
+  private setStatus(state: WhatsAppState, summary: string, detalhe?: string): void {
+    const anterior = this.status.state;
     this.status = { state, summary };
+    // Só avisa quando o estado realmente muda: reconexões repetidas gerariam
+    // a mesma mensagem várias vezes no chat.
+    if (state !== anterior) {
+      this.onStateChange?.(state, detalhe);
+    }
   }
 
   /**
@@ -286,7 +303,7 @@ export class WhatsAppClient {
   private async onConnectionUpdate(u: BaileysConnectionUpdate): Promise<void> {
     if (u.connection === 'open') {
       this.tentativa = 0;
-      this.setStatus('conectado', 'Conectado.');
+      this.setStatus('conectado', 'Conectado.', this.numeroAtual);
       this.logger.info('WhatsApp conectado.');
       return;
     }
@@ -301,7 +318,8 @@ export class WhatsAppClient {
         );
         this.setStatus(
           'erro',
-          'Sessão encerrada no celular. Apague data/whatsapp-auth e reinicie para parear de novo.',
+          'Sessão encerrada no celular. Use Desconectar e Conectar de novo.',
+          'A sessão foi encerrada no celular.',
         );
         return;
       }

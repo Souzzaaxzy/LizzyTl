@@ -209,7 +209,17 @@ No celular: **WhatsApp → Aparelhos conectados → Conectar aparelho → Conect
 com número de telefone**, e digite o código. Ele expira em cerca de um minuto;
 se expirar, toque em Conectar de novo.
 
+O bot avisa no chat **quando a conexão abre** — você não precisa abrir a tela
+para conferir. Se a sessão cair ou for encerrada no celular, ele também avisa,
+com a orientação do que fazer.
+
 Use **🔌 Desconectar** para encerrar a sua sessão e apagar as credenciais.
+
+### Textos que se copia com um toque
+
+O código de pareamento e o seu ID no perfil aparecem em `<code>`, que no
+Telegram vira **texto tocável**: um toque copia, sem precisar selecionar no
+celular.
 
 ### Isolamento entre usuários
 

@@ -242,7 +242,9 @@ describe('WhatsAppClient', () => {
     });
 
     assert.equal(client.getStatus().state, 'erro');
-    assert.match(client.getStatus().summary, /Apague data\/whatsapp-auth/);
+    // O texto orienta pela interface, não por caminho de arquivo: quem usa o
+    // bot não deve precisar mexer em disco.
+    assert.match(client.getStatus().summary, /Desconectar e Conectar/);
     client.stop();
   });
 
@@ -289,6 +291,7 @@ describe('WhatsAppManager: uma sessão por usuário', () => {
     const store = fakeManagerStore(opts.comNumero ?? []);
     const sockets = new Map<number, ReturnType<typeof fakeSocket>['socket']>();
     const codigos: { userId: number; code: string }[] = [];
+    const mudancas: { userId: number; state: string; detalhe?: string }[] = [];
 
     const manager = new WhatsAppManager({
       store: store as never,
@@ -296,6 +299,7 @@ describe('WhatsAppManager: uma sessão por usuário', () => {
       pairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
       maxSessions: opts.maxSessions ?? 20,
       onPairingCode: (userId, code) => codigos.push({ userId, code }),
+      onStateChange: (userId, state, detalhe) => mudancas.push({ userId, state, detalhe }),
       loadModule: async () => {
         // Cada sessão recebe o próprio socket: é isso que garante isolamento.
         const criado = fakeSocket();
@@ -304,7 +308,7 @@ describe('WhatsAppManager: uma sessão por usuário', () => {
       },
     });
 
-    return { manager, store, sockets, codigos };
+    return { manager, store, sockets, codigos, mudancas };
   }
 
   it('usuário sem sessão aparece desligado, sem criar socket', () => {
@@ -417,5 +421,62 @@ describe('WhatsAppManager: uma sessão por usuário', () => {
     manager.stopAll();
 
     assert.equal(manager.activeCount(), 0);
+  });
+});
+
+
+describe('aviso de mudança de estado', () => {
+  function makeSimpleClient() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-st-'));
+    const { socket, chamadas } = fakeSocket();
+    const session = fakeSession(42, '5511999999999');
+    session.authDir = dir;
+    const eventos: { state: string; detalhe?: string }[] = [];
+    const client = new WhatsAppClient({
+      config: { whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE },
+      logger: silentLogger,
+      session,
+      loadModule: async () => fakeModule(socket),
+      onStateChange: (state, detalhe) => eventos.push({ state, detalhe }),
+    });
+    return { client, socket, eventos, chamadas };
+  }
+
+  it('avisa quando a conexão abre, com o número', async () => {
+    const { client, socket, eventos } = makeSimpleClient();
+
+    await client.start();
+    socket.emitir('connection.update', { connection: 'open' });
+
+    const conectou = eventos.find((e) => e.state === 'conectado');
+    assert.ok(conectou, 'deve avisar que conectou');
+    assert.equal(conectou?.detalhe, '5511999999999', 'leva o número no aviso');
+  });
+
+  it('avisa quando a sessão é encerrada no celular', async () => {
+    const { client, socket, eventos } = makeSimpleClient();
+
+    await client.start();
+    socket.emitir('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: 401 } } },
+    });
+
+    const erro = eventos.find((e) => e.state === 'erro');
+    assert.ok(erro, 'deve avisar do encerramento');
+    assert.match(String(erro?.detalhe), /encerrada no celular/);
+    client.stop();
+  });
+
+  it('não repete o aviso se o estado não mudou', async () => {
+    const { client, socket, eventos } = makeSimpleClient();
+
+    await client.start();
+    socket.emitir('connection.update', { connection: 'open' });
+    socket.emitir('connection.update', { connection: 'open' });
+    socket.emitir('connection.update', { connection: 'open' });
+
+    const avisos = eventos.filter((e) => e.state === 'conectado');
+    assert.equal(avisos.length, 1, 'reconexão repetida não deve spammar o chat');
   });
 });

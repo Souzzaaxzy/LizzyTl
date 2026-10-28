@@ -60,6 +60,18 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - A conexão do WhatsApp deve poder rodar no mesmo processo que o Telegram, com
   tratamento de falhas independente.
 
+## Notificações e texto tocável
+
+- Textos que o usuário deve copiar (código de pareamento, ID no perfil) vão em
+  `<code>`. No Telegram isso vira texto tocável: um toque copia. Sem a tag, o
+  usuário teria de selecionar manualmente no celular.
+- As mensagens que o bot envia sozinho ficam em
+  `src/telegram/messages/notifications.ts`, fora do `index.ts`.
+- `onStateChange` só dispara quando o estado **muda**. Reconexão repetida
+  geraria a mesma mensagem várias vezes e poluiria o chat.
+- `buildStateMessage` devolve `null` para estados que não merecem aviso
+  (`conectando`, `aguardando_pareamento`), porque já têm mensagem própria.
+
 ## Multi-sessão de WhatsApp
 
 - O bot é público: **cada usuário tem a própria sessão** de WhatsApp. O

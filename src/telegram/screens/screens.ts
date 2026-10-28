@@ -254,7 +254,8 @@ export function buildProfileCaption(context: ScreenContext): string {
     '',
     `♛ 𝐍𝐨𝐦𝐞: ${escapeHtml(user.firstName)}`,
     `✦ 𝐔𝐬𝐮𝐚́𝐫𝐢𝐨: ${username}`,
-    `✧ 𝐈𝐃: ${user.id}`,
+    // <code> deixa o ID tocável: um toque copia, sem selecionar o texto.
+    `✧ 𝐈𝐃: <code>${user.id}</code>`,
     '',
     `♛ 𝐏𝐥𝐚𝐧𝐨: ${PLAN_LABELS[user.plan]}`,
     `✦ 𝐄𝐧𝐭𝐫𝐨𝐮 𝐞𝐦: ${formatDate(user.firstSeenAt)}`,

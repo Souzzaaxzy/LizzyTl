@@ -26,6 +26,10 @@ import { createBot } from './telegram/client.js';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler.js';
 import { registerMessageHandler } from './telegram/handlers/message-handler.js';
 import { registerRateLimit } from './telegram/handlers/rate-limit.js';
+import {
+  buildPairingMessage,
+  buildStateMessage,
+} from './telegram/messages/notifications.js';
 import { PendingActions } from './telegram/state/pending-action.js';
 import { WhatsAppManager } from './whatsapp/manager.js';
 
@@ -78,24 +82,27 @@ async function main(): Promise<void> {
     maxSessions: config.whatsappMaxSessions,
     onPairingCode: (userId, codigo) => {
       void bot.telegram
-        .sendMessage(
-          userId,
-          [
-            '📱 𝐂𝐨́𝐝𝐢𝐠𝐨 𝐝𝐞 𝐩𝐚𝐫𝐞𝐚𝐦𝐞𝐧𝐭𝐨 𝐝𝐨 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
-            '',
-            `♛ <code>${codigo}</code>`,
-            '',
-            '✦ 𝐍𝐨 𝐜𝐞𝐥𝐮𝐥𝐚𝐫: WhatsApp → Aparelhos conectados → Conectar aparelho →',
-            '  Conectar com número de telefone.',
-            '',
-            '♛ 𝐎 𝐜𝐨́𝐝𝐢𝐠𝐨 𝐞𝐱𝐩𝐢𝐫𝐚 𝐞𝐦 𝐜𝐞𝐫𝐜𝐚 𝐝𝐞 𝟏 𝐦𝐢𝐧𝐮𝐭𝐨. Se expirar, toque em',
-            '  Conectar de novo.',
-          ].join('\n'),
-          { parse_mode: 'HTML' },
-        )
+        .sendMessage(userId, buildPairingMessage(codigo), { parse_mode: 'HTML' })
         .catch((error: unknown) => {
           logger.error(
             `Falha ao enviar o código de pareamento ao usuário ${userId}.`,
+            error,
+          );
+        });
+    },
+
+    // Avisa no chat quando a sessão conecta, cai ou é encerrada. Sem isso o
+    // usuário só descobriria abrindo a tela para conferir.
+    onStateChange: (userId, state, detalhe) => {
+      const mensagem = buildStateMessage(state, detalhe);
+      if (mensagem === null) {
+        return;
+      }
+      void bot.telegram
+        .sendMessage(userId, mensagem, { parse_mode: 'HTML' })
+        .catch((error: unknown) => {
+          logger.error(
+            `Falha ao avisar o usuário ${userId} sobre o estado do WhatsApp.`,
             error,
           );
         });

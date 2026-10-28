@@ -14,6 +14,7 @@ import type { Logger } from '../core/logger.js';
 import type { WhatsappSessionStore } from '../data/whatsapp-session-store.js';
 import {
   WhatsAppClient,
+  type WhatsAppState,
   type WhatsAppStatus,
 } from './client.js';
 import type { BaileysMakeSocket, BaileysModule } from './baileys-types.js';
@@ -46,6 +47,8 @@ export interface WhatsAppManagerDeps {
   loadModule?: () => Promise<BaileysModule>;
   /** Avisa o usuário quando o código de pareamento dele fica pronto. */
   onPairingCode: (userId: number, code: string) => void;
+  /** Avisa o usuário quando o estado da sessão dele muda. */
+  onStateChange: (userId: number, state: WhatsAppState, detalhe?: string) => void;
 }
 
 const DESLIGADO: WhatsAppStatus = {
@@ -131,6 +134,7 @@ export class WhatsAppManager {
       loadModule: this.deps.loadModule,
       // O código vai para o usuário dono daquela sessão, nunca para outro.
       onPairingCode: (codigo) => this.deps.onPairingCode(userId, codigo),
+      onStateChange: (state, detalhe) => this.deps.onStateChange(userId, state, detalhe),
     });
 
     this.clientes.set(userId, cliente);
@@ -172,6 +176,7 @@ export class WhatsAppManager {
       createSocket: this.deps.createSocket,
       loadModule: this.deps.loadModule,
       onPairingCode: (codigo) => this.deps.onPairingCode(userId, codigo),
+      onStateChange: (state, detalhe) => this.deps.onStateChange(userId, state, detalhe),
     });
     this.clientes.set(userId, cliente);
 

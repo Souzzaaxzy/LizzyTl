@@ -77,7 +77,8 @@ describe('tela de perfil', () => {
     assert.match(caption, /👤 𝐏𝐞𝐫𝐟𝐢𝐥/);
     assert.match(caption, /𝐍𝐨𝐦𝐞: Souzza/);
     assert.match(caption, /𝐔𝐬𝐮𝐚́𝐫𝐢𝐨: @souzza/);
-    assert.match(caption, /𝐈𝐃: 12345/);
+    // O ID vai em <code>, para o Telegram permitir copiar com um toque.
+    assert.match(caption, /𝐈𝐃: <code>12345<\/code>/);
     assert.match(caption, /𝐏𝐥𝐚𝐧𝐨: 𝐏𝐚𝐝𝐫𝐚̃𝐨/);
     assert.match(caption, /𝐄𝐧𝐭𝐫𝐨𝐮 𝐞𝐦: 15\/01\/2026/);
     assert.match(caption, /𝐀𝐜𝐞𝐬𝐬𝐨𝐬: 7/);
