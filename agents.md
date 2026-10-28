@@ -79,6 +79,22 @@ Nunca declare um teste aprovado sem tê-lo executado.
 - O código de pareamento vai para o chat de quem pediu, via
   `onPairingCode(userId, code)`. Nunca para outro usuário.
 
+## Instalação do fork: use o tarball, não "github:"
+
+O npm 11.20+ **bloqueia dependências do tipo git** por padrão
+(`allow-git = "none"`), com o erro `EALLOWGIT`. Além disso, uma referência
+`github:` é resolvida por **SSH** (`git+ssh://git@github.com/...`), o que exige
+chave SSH configurada na máquina — algo que o servidor de produção não tem.
+
+Por isso a dependência aponta para o **tarball do commit**:
+
+```
+https://github.com/Souzzaaxzy/baileys/archive/<sha>.tar.gz
+```
+
+Vantagens: não exige `git` instalado, não usa SSH, o npm não bloqueia, e o
+commit fica fixado (build reproduzível). Para atualizar o fork, troque o SHA.
+
 ## ESM e o fork da Baileys
 
 - O projeto é **ESM** (`"type": "module"`, tsconfig `NodeNext`). Todo import

@@ -367,6 +367,14 @@ Hoje existem apenas `Padrão` e `Dono`. Novos planos serão adicionados depois.
 
 ## Solução para problemas comuns
 
+- **`EALLOWGIT: Fetching packages of type "git" have been disabled`** — npm 11.20+
+  bloqueia dependências git por padrão. Este projeto **não precisa** de flag:
+  o fork é instalado pelo tarball do commit, não por `github:`. Se você vir esse
+  erro, seu `package.json` está desatualizado — rode `git pull` antes do
+  `npm install`.
+- **Erro de SSH ao instalar (`git+ssh://git@github.com`)** — mesma causa. O
+  tarball evita SSH por completo, então o servidor não precisa de chave SSH.
+
 - **`Error: Cannot find module '.../dist/index.js'`** — o `dist/` é artefato de
   build e não vai para o Git, então um clone novo não o possui. O `npm start`
   já compila automaticamente, mas se o erro aparecer, rode:
