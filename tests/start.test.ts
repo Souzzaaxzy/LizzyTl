@@ -187,6 +187,20 @@ describe('comando /start (com GIF disponível)', () => {
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
+
+  it('envia o arquivo com nome .gif para chegar como animação, não como vídeo', async () => {
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(startUpdate(4, { id: 11, username: 'gif_nome' }));
+
+    const animation = calls.find((call) => call.method === 'sendAnimation')?.payload
+      .animation as { filename?: string } | undefined;
+    assert.ok(animation, 'deve enviar uma animação');
+    // Sem o filename, o Telegraf envia "animation.mp4" e o Telegram exibe vídeo.
+    assert.equal(animation.filename, 'start.gif');
+  });
 });
 
 describe('callbacks do menu', () => {

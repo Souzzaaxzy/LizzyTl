@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import type { Telegraf } from 'telegraf';
 
@@ -66,8 +67,15 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     }
 
     try {
+      // O Telegraf nomeia streams sem nome como "animation.mp4", e o Telegram
+      // entrega isso como vídeo. Informar o filename faz o arquivo chegar como
+      // animação (.gif). O nome é derivado do caminho configurado, então
+      // trocar START_GIF_PATH continua funcionando sem mexer nesta lógica.
       await ctx.replyWithAnimation(
-        { source: fs.createReadStream(deps.config.startGifPath) },
+        {
+          source: fs.createReadStream(deps.config.startGifPath),
+          filename: path.basename(deps.config.startGifPath),
+        },
         {
           caption,
           parse_mode: 'HTML',
