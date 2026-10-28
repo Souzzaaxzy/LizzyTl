@@ -41,6 +41,20 @@ export function extractCallbackData(query: unknown): string {
 }
 
 /**
+ * Detecta o erro do Telegram para edição sem mudança de conteúdo.
+ *
+ * Sem isso, repetir o mesmo clique enviaria uma mensagem nova e o menu
+ * apareceria duplicado no chat.
+ */
+export function isNotModified(error: unknown): boolean {
+  const descricao =
+    typeof error === 'object' && error !== null && 'description' in error
+      ? String((error as { description?: unknown }).description ?? '')
+      : '';
+  return descricao.includes('message is not modified');
+}
+
+/**
  * Monta o contexto de uma tela. O bloco `admin` só é preenchido para o dono,
  * e a decisão vem do `UserStore` (servidor), nunca do payload do callback.
  */
@@ -84,6 +98,12 @@ async function renderScreen(
       reply_markup: keyboard,
     });
   } catch (error) {
+    // Clicar no mesmo botão duas vezes faz o Telegram recusar a edição com
+    // "message is not modified". Isso não é falha: a tela já está correta.
+    // Tratar como erro enviaria uma mensagem nova e duplicaria o menu no chat.
+    if (isNotModified(error)) {
+      return;
+    }
     deps.logger.debug('Edição da legenda falhou; enviando uma mensagem nova.', error);
     await ctx.reply(caption, { parse_mode: 'HTML', reply_markup: keyboard });
   }

@@ -8,12 +8,12 @@ import { Telegram, type Telegraf } from 'telegraf';
 
 import { createLogger } from '../src/core/logger';
 import { MediaCache } from '../src/data/media-cache';
-import { UserStore } from '../src/data/user-store';
+import { UserStore, sanitizeUsers } from '../src/data/user-store';
 import { registerHelpCommand } from '../src/telegram/commands/help';
 import { publishBotCommands } from '../src/telegram/commands/publish-commands';
 import { registerStartCommand } from '../src/telegram/commands/start';
 import { createBot } from '../src/telegram/client';
-import { registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
+import { isNotModified, registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
 import { registerMessageHandler } from '../src/telegram/handlers/message-handler';
 import { registerRateLimit } from '../src/telegram/handlers/rate-limit';
 import { RateLimiter } from '../src/core/rate-limiter';
@@ -608,5 +608,167 @@ describe('proteção contra abuso', () => {
       respostas.some((r) => String(r.payload.text).includes('𝐂𝐚𝐥𝐦𝐚')),
       false,
     );
+  });
+});
+
+
+describe('regressões encontradas na auditoria', () => {
+  it('ignora mensagens de grupo em vez de responder', async () => {
+    const users = makeStore();
+    const limiter = new RateLimiter({ limit: 100, windowMs: 60_000 });
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerRateLimit(bot, { limiter, logger: silentLogger, users });
+    registerStartCommand(bot, {
+      config: { startMediaPath: path.join(dataDir, 'inexistente.mp4') },
+      logger: silentLogger,
+      users,
+      mediaCache: makeCache(),
+    });
+    registerMessageHandler(bot, { logger: silentLogger });
+    const calls = stubTelegram();
+
+    const grupo = { id: -1001234567890, type: 'supergroup' as const, title: 'Grupo' };
+    await bot.handleUpdate({
+      update_id: 900,
+      message: {
+        message_id: 900, date: 1, chat: grupo,
+        from: { id: 42, is_bot: false, first_name: 'Ana' },
+        text: '/start',
+        entities: [{ type: 'bot_command', offset: 0, length: 6 }],
+      },
+    });
+    await bot.handleUpdate({
+      update_id: 901,
+      message: {
+        message_id: 901, date: 1, chat: grupo,
+        from: { id: 43, is_bot: false, first_name: 'B' },
+        text: 'bom dia',
+      },
+    });
+
+    assert.equal(
+      calls.filter((c) => c.method !== 'getMe').length,
+      0,
+      'não pode responder nada em grupo',
+    );
+  });
+
+  it('não duplica a mensagem quando a edição não muda nada', async () => {
+    const users = makeStore();
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerCallbackHandler(bot, { logger: silentLogger, users });
+    stubTelegram();
+
+    // Simula o 400 'message is not modified' do Telegram.
+    const proto = Telegram.prototype as unknown as {
+      callApi: (m: string, p?: unknown) => Promise<unknown>;
+    };
+    const original = proto.callApi;
+    proto.callApi = (m: string, p?: unknown) => {
+      if (m === 'getMe') {
+        return Promise.resolve({ id: 1, is_bot: true, first_name: 'L', username: 'l' });
+      }
+      if (m === 'editMessageCaption') {
+        return Promise.reject(
+          Object.assign(new Error('Bad Request: message is not modified'), {
+            description: 'Bad Request: message is not modified',
+          }),
+        );
+      }
+      return Promise.resolve(true);
+    };
+
+    const calls: { method: string }[] = [];
+    const originalCall = proto.callApi;
+    proto.callApi = (m: string, p?: unknown) => {
+      calls.push({ method: m });
+      return originalCall.call(proto, m, p);
+    };
+
+    await bot.handleUpdate(callbackUpdate(910, CALLBACKS.MENU_PROFILE, 6001));
+    proto.callApi = original;
+
+    assert.equal(
+      calls.some((c) => c.method === 'sendMessage'),
+      false,
+      'não pode enviar mensagem nova quando só não houve mudança',
+    );
+  });
+
+  it('isNotModified reconhece o erro e ignora outros', () => {
+    assert.equal(isNotModified({ description: 'Bad Request: message is not modified' }), true);
+    assert.equal(isNotModified(new Error('outro erro')), false);
+    assert.equal(isNotModified(undefined), false);
+  });
+
+  it('grava os dados do usuário com permissão privada', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-perm-'));
+    const store = new UserStore({ dataDir: dir, logger: silentLogger });
+    store.touch({ id: 1, first_name: 'X' });
+    const modo = fs.statSync(path.join(dir, 'users.json')).mode & 0o777;
+    assert.equal(modo, 0o600, 'dados de usuário não devem ser legíveis por outros');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('descarta o file_id quando o arquivo de mídia é trocado', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-sig-'));
+    const mediaPath = path.join(dir, 'start.mp4');
+    fs.writeFileSync(mediaPath, 'CONTEUDO ANTIGO');
+    const cache = new MediaCache(dir, silentLogger);
+    cache.set(mediaPath, 'FILE_ID_ANTIGO');
+    assert.equal(cache.get(mediaPath), 'FILE_ID_ANTIGO');
+
+    // O arquivo é substituído: o file_id antigo não vale mais.
+    fs.writeFileSync(mediaPath, 'CONTEUDO NOVO E DIFERENTE');
+    assert.equal(cache.get(mediaPath), undefined, 'não pode servir mídia antiga');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('robustez do store contra dados inválidos', () => {
+  it('sanitizeUsers descarta registros inválidos e mantém os bons', () => {
+    const limpos = sanitizeUsers({
+      version: 1,
+      users: {
+        '1': { id: 1, firstName: 'Bom', plan: 'padrao', firstSeenAt: 'x', lastSeenAt: 'y', accessCount: 2 },
+        '2': 'isso não é um registro',
+        '3': { semId: true },
+        '4': { id: 'texto' },
+        '5': null,
+      },
+    });
+    assert.deepEqual(Object.keys(limpos), ['1']);
+    assert.equal(limpos['1']?.accessCount, 2);
+  });
+
+  it('sanitizeUsers tolera arquivo sem users ou com tipo errado', () => {
+    assert.deepEqual(sanitizeUsers(null), {});
+    assert.deepEqual(sanitizeUsers('texto'), {});
+    assert.deepEqual(sanitizeUsers({ version: 1 }), {});
+    assert.deepEqual(sanitizeUsers({ users: 'texto' }), {});
+    assert.deepEqual(sanitizeUsers({ users: [] }), {});
+  });
+
+  it('não quebra com arquivo cujo users não é objeto', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-bad-'));
+    fs.writeFileSync(path.join(dir, 'users.json'), '{"version":1,"users":"texto"}');
+    const store = new UserStore({ dataDir: dir, logger: silentLogger });
+    assert.equal(store.count(), 0);
+    assert.doesNotThrow(() => store.touch({ id: 1, first_name: 'x' }));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('completa registro antigo com campos faltando em vez de gerar NaN', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-old-'));
+    fs.writeFileSync(
+      path.join(dir, 'users.json'),
+      JSON.stringify({ version: 1, users: { '7': { id: 7, firstName: 'Antigo' } } }),
+    );
+    const store = new UserStore({ dataDir: dir, logger: silentLogger });
+    const r = store.touch({ id: 7, first_name: 'Antigo' });
+    assert.equal(r.accessCount, 1, 'não pode virar NaN');
+    assert.equal(r.plan, 'padrao');
+    assert.doesNotThrow(() => store.stats());
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

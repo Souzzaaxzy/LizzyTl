@@ -18,6 +18,7 @@ export const CALLBACKS = {
   MENU_WHATSAPP: 'menu_whatsapp',
   MENU_ABOUT: 'menu_about',
   NAV_BACK: 'nav_back',
+  ADMIN_HOME: 'admin_home',
   ADMIN_STATS: 'admin_stats',
   ADMIN_USERS: 'admin_users',
 } as const;
@@ -180,7 +181,7 @@ export function buildOwnerMenuKeyboard(): InlineKeyboardMarkup {
       Markup.button.callback('📱 WhatsApp', CALLBACKS.MENU_WHATSAPP),
       Markup.button.callback('ℹ️ Sobre a Lizzy', CALLBACKS.MENU_ABOUT),
     ],
-    [Markup.button.callback('🛡️ Painel do dono', CALLBACKS.ADMIN_STATS)],
+    [Markup.button.callback('🛡️ Painel do dono', CALLBACKS.ADMIN_HOME)],
   ]).reply_markup;
 }
 
@@ -265,9 +266,14 @@ export function adminKeyboard(): InlineKeyboardMarkup {
   ]).reply_markup;
 }
 
-/** Teclado das telas internas do painel: só o botão de voltar. */
+/**
+ * Teclado das telas internas do painel. O Voltar retorna ao hub, para o dono
+ * navegar entre as telas sem passar pelo menu a cada vez.
+ */
 export function adminBackKeyboard(): InlineKeyboardMarkup {
-  return backKeyboard();
+  return Markup.inlineKeyboard([
+    Markup.button.callback(BACK_BUTTON_LABEL, CALLBACKS.ADMIN_HOME),
+  ]).reply_markup;
 }
 
 /** Legenda da tela de estatísticas do painel. */
@@ -362,6 +368,7 @@ export const SCREENS: Record<ScreenId, Screen> = {
   },
   admin: {
     id: 'admin',
+    ownerOnly: true,
     buildCaption: (context) =>
       [
         '🛡️ 𝐏𝐚𝐢𝐧𝐞𝐥 𝐝𝐨 𝐝𝐨𝐧𝐨',
@@ -396,6 +403,8 @@ export function screenForCallback(callbackData: string): Screen | undefined {
       return SCREENS.whatsapp;
     case CALLBACKS.MENU_ABOUT:
       return SCREENS.about;
+    case CALLBACKS.ADMIN_HOME:
+      return SCREENS.admin;
     case CALLBACKS.ADMIN_STATS:
       return SCREENS.adminStats;
     case CALLBACKS.ADMIN_USERS:

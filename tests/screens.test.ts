@@ -256,13 +256,14 @@ describe('painel do dono', () => {
     assert.equal(rows.length, 3, 'três linhas: dois pares e o painel');
     const callbacks = rows.flat().map((b) => callbackOf(b));
     assert.equal(callbacks.length, 5);
-    assert.ok(callbacks.includes(CALLBACKS.ADMIN_STATS));
+    assert.ok(callbacks.includes(CALLBACKS.ADMIN_HOME), 'o menu leva ao hub do painel');
   });
 
   it('o menu de quem não é dono NÃO mostra o painel', () => {
     const keyboard = menuKeyboardFor(screenContext(sampleUser));
     const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
     assert.equal(callbacks.length, 4);
+    assert.equal(callbacks.includes(CALLBACKS.ADMIN_HOME), false);
     assert.equal(callbacks.includes(CALLBACKS.ADMIN_STATS), false);
   });
 
@@ -297,8 +298,35 @@ describe('painel do dono', () => {
   });
 
   it('as telas de admin são marcadas como restritas ao dono', () => {
+    assert.equal(SCREENS.admin.ownerOnly, true, 'o hub também precisa ser restrito');
     assert.equal(SCREENS.adminStats.ownerOnly, true);
     assert.equal(SCREENS.adminUsers.ownerOnly, true);
+  });
+
+  it('o hub do painel é alcançável e leva às duas telas internas', () => {
+    assert.equal(screenForCallback(CALLBACKS.ADMIN_HOME)?.id, 'admin');
+    const keyboard = SCREENS.admin.buildKeyboard(screenContext(dono));
+    const callbacks = keyboard.inline_keyboard.flat().map((b) => callbackOf(b));
+    assert.ok(callbacks.includes(CALLBACKS.ADMIN_STATS));
+    assert.ok(callbacks.includes(CALLBACKS.ADMIN_USERS));
+  });
+
+  it('o Voltar das telas internas volta ao hub, não ao menu', () => {
+    for (const id of ['adminStats', 'adminUsers'] as const) {
+      const callbacks = SCREENS[id]
+        .buildKeyboard(screenContext(dono))
+        .inline_keyboard.flat()
+        .map((b) => callbackOf(b));
+      assert.ok(callbacks.includes(CALLBACKS.ADMIN_HOME), `${id} deve voltar ao hub`);
+    }
+  });
+
+  it('o Voltar do hub leva ao menu principal', () => {
+    const callbacks = SCREENS.admin
+      .buildKeyboard(screenContext(dono))
+      .inline_keyboard.flat()
+      .map((b) => callbackOf(b));
+    assert.ok(callbacks.includes(CALLBACKS.NAV_BACK));
   });
 
   it('telas comuns NÃO são restritas', () => {

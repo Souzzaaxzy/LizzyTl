@@ -27,6 +27,44 @@ export interface UserRecord {
   accessCount: number;
 }
 
+/**
+ * Valida o conteúdo lido do disco e devolve apenas registros utilizáveis.
+ *
+ * Um arquivo editado à mão, truncado ou gravado por uma versão anterior não
+ * pode derrubar o bot nem contaminar o resto da base. Registro inválido é
+ * descartado em silêncio.
+ */
+export function sanitizeUsers(parsed: unknown): Record<string, UserRecord> {
+  if (typeof parsed !== 'object' || parsed === null) {
+    return {};
+  }
+  const candidatos = (parsed as { users?: unknown }).users;
+  if (typeof candidatos !== 'object' || candidatos === null || Array.isArray(candidatos)) {
+    return {};
+  }
+
+  const limpos: Record<string, UserRecord> = {};
+  for (const [chave, valor] of Object.entries(candidatos as Record<string, unknown>)) {
+    if (typeof valor !== 'object' || valor === null) {
+      continue;
+    }
+    const registro = valor as Partial<UserRecord>;
+    if (typeof registro.id !== 'number' || !Number.isFinite(registro.id)) {
+      continue;
+    }
+    limpos[chave] = {
+      id: registro.id,
+      username: typeof registro.username === 'string' ? registro.username : undefined,
+      firstName: typeof registro.firstName === 'string' ? registro.firstName : 'sem nome',
+      plan: registro.plan === 'dono' ? 'dono' : 'padrao',
+      firstSeenAt: typeof registro.firstSeenAt === 'string' ? registro.firstSeenAt : '',
+      lastSeenAt: typeof registro.lastSeenAt === 'string' ? registro.lastSeenAt : '',
+      accessCount: typeof registro.accessCount === 'number' ? registro.accessCount : 0,
+    };
+  }
+  return limpos;
+}
+
 export interface StoreStats {
   /** Total de usuários registrados. */
   totalUsers: number;
@@ -76,10 +114,8 @@ export class UserStore {
       return;
     }
     try {
-      const parsed = JSON.parse(fs.readFileSync(this.filePath, 'utf8')) as StoreShape;
-      if (parsed && typeof parsed === 'object' && parsed.users) {
-        this.users = parsed.users;
-      }
+      const parsed: unknown = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+      this.users = sanitizeUsers(parsed);
     } catch (error) {
       // Arquivo corrompido não deve derrubar o bot: começa vazio e avisa.
       this.logger.warn(
@@ -95,7 +131,9 @@ export class UserStore {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const payload: StoreShape = { version: 1, users: this.users };
       const tmpPath = `${this.filePath}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+      // 0o600: os dados são privados dos usuários; não devem ser legíveis por
+      // outras contas da máquina.
+      fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), { mode: 0o600 });
       fs.renameSync(tmpPath, this.filePath);
     } catch (error) {
       this.logger.error(`Falha ao gravar "${this.filePath}".`, error);
@@ -112,13 +150,18 @@ export class UserStore {
     const now = new Date().toISOString();
     const existing = this.users[key];
 
+    // Campos podem faltar em registros gravados por uma versão anterior; por
+    // isso cada um tem um valor de reserva em vez de confiar no que veio.
     const record: UserRecord = existing
       ? {
           ...existing,
+          id: user.id,
           username: user.username,
-          firstName: user.first_name ?? existing.firstName,
+          firstName: user.first_name ?? existing.firstName ?? 'sem nome',
+          plan: existing.plan ?? 'padrao',
+          firstSeenAt: existing.firstSeenAt ?? now,
           lastSeenAt: now,
-          accessCount: existing.accessCount + 1,
+          accessCount: (existing.accessCount ?? 0) + 1,
         }
       : {
           id: user.id,
@@ -151,7 +194,7 @@ export class UserStore {
    */
   recent(limit = 10): UserRecord[] {
     return Object.values(this.users)
-      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt))
+      .sort((a, b) => (b.lastSeenAt ?? '').localeCompare(a.lastSeenAt ?? ''))
       .slice(0, limit);
   }
 
@@ -161,11 +204,14 @@ export class UserStore {
     const today = new Date().toISOString().slice(0, 10);
     const owner = this.ownerId !== undefined ? this.users[String(this.ownerId)] : undefined;
 
+    const noDia = (iso: string | undefined): boolean =>
+      typeof iso === 'string' && iso.slice(0, 10) === today;
+
     return {
       totalUsers: all.length,
-      totalAccesses: all.reduce((sum, u) => sum + u.accessCount, 0),
-      newToday: all.filter((u) => u.firstSeenAt.slice(0, 10) === today).length,
-      activeToday: all.filter((u) => u.lastSeenAt.slice(0, 10) === today).length,
+      totalAccesses: all.reduce((sum, u) => sum + (u.accessCount ?? 0), 0),
+      newToday: all.filter((u) => noDia(u.firstSeenAt)).length,
+      activeToday: all.filter((u) => noDia(u.lastSeenAt)).length,
       ownerFirstSeenAt: owner?.firstSeenAt,
     };
   }

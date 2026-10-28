@@ -62,6 +62,27 @@ Nunca declare um teste aprovado sem tê-lo executado.
 
 ## Lições aprendidas (não repita estes erros)
 
+### Auditoria de bugs (corrigidos)
+
+1. **Bot respondia em grupos.** Sem filtro de tipo de chat, ele respondia
+   qualquer mensagem de qualquer membro, virando spam e misturando dados.
+   Corrigido em `isIgnoredChat` (rate-limit.ts), que ignora tudo que não é
+   conversa privada.
+2. **"message is not modified" duplicava o menu.** O Telegram recusa editar sem
+   mudança com 400; tratar como falha enviava mensagem nova. Corrigido com
+   `isNotModified` no callback-handler.
+3. **file_id obsoleto.** Trocar o arquivo de mídia continuava enviando a mídia
+   antiga. Corrigido com assinatura (tamanho + mtime) no media-cache.
+4. **users.json derrubava o bot.** Arquivo com `users` não-objeto quebrava, e
+   registro antigo gerava `NaN` em acessos. Corrigido com `sanitizeUsers`.
+5. **Tela do hub de admin era inalcançável.** O menu levava direto às
+   estatísticas, então o botão de Usuários nunca aparecia. Corrigido com o
+   callback `admin_home` e `ownerOnly` no hub.
+6. **Dados legíveis por outros usuários da máquina** (modo 644). Agora 600.
+
+Ao criar um callback novo, **verifique se ele é alcançável** a partir de algum
+teclado, e se o Voltar leva a algum lugar que não seja a própria tela.
+
 ### Mídia do menu: use MP4 puro, não GIF
 
 O Telegram **não exibe GIF como GIF**. Ele reencoda a mídia para MP4 antes de

@@ -9,7 +9,7 @@
  * espera, em vez de silêncio. Ficar mudo faria parecer que o bot quebrou.
  */
 
-import type { MiddlewareFn, Telegraf } from 'telegraf';
+import type { Context, MiddlewareFn, Telegraf } from 'telegraf';
 
 import type { Logger } from '../../core/logger';
 import type { RateLimiter } from '../../core/rate-limiter';
@@ -29,12 +29,33 @@ export const RATE_LIMIT_MESSAGE = (seconds: number): string =>
     `✦ 𝐓𝐞𝐧𝐭𝐞 𝐧𝐨𝐯𝐚𝐦𝐞𝐧𝐭𝐞 𝐞𝐦 ${seconds} 𝐬𝐞𝐠𝐮𝐧𝐝𝐨𝐬.`,
   ].join('\n');
 
+/**
+ * O bot é de uso privado: cada usuário tem perfil, plano e dados próprios.
+ *
+ * Em grupo ele responderia a qualquer mensagem de qualquer membro, virando
+ * spam e misturando os dados de todo mundo no mesmo perfil. Aqui ele ignora
+ * tudo que não seja conversa privada. Devolve true quando deve ignorar.
+ */
+export function isIgnoredChat(ctx: Context): boolean {
+  const tipo = ctx.chat?.type;
+  if (tipo === undefined) {
+    return false;
+  }
+  return tipo !== 'private';
+}
+
 export function createRateLimitMiddleware(
   deps: RateLimitMiddlewareDeps,
-): MiddlewareFn<import('telegraf').Context> {
+): MiddlewareFn<Context> {
   const logger = deps.logger.child('rate-limit');
 
   return async (ctx, next) => {
+    // Grupo ou canal: ignora em silêncio, sem responder nada.
+    if (isIgnoredChat(ctx)) {
+      logger.debug(`Atualização ignorada: chat do tipo "${ctx.chat?.type}".`);
+      return;
+    }
+
     const userId = ctx.from?.id;
 
     // Sem usuário identificado não há o que limitar por ID.

@@ -17,6 +17,24 @@ interface CacheShape {
   /** Caminho do arquivo de origem a que o file_id pertence. */
   mediaPath: string;
   fileId: string;
+  /**
+   * Assinatura do arquivo no momento do upload (tamanho + mtime). Sem isso,
+   * trocar o arquivo no disco continuaria enviando o file_id da mídia antiga.
+   */
+  signature?: string;
+}
+
+/**
+ * Assinatura barata do arquivo: tamanho + data de modificação. Muda quando o
+ * arquivo é substituído, sem precisar ler o conteúdo inteiro.
+ */
+export function fileSignature(mediaPath: string): string | undefined {
+  try {
+    const info = fs.statSync(mediaPath);
+    return `${info.size}:${info.mtimeMs}`;
+  } catch {
+    return undefined;
+  }
 }
 
 export class MediaCache {
@@ -45,16 +63,30 @@ export class MediaCache {
     }
   }
 
-  /** Devolve o file_id apenas se ele pertencer ao arquivo informado. */
+  /**
+   * Devolve o file_id apenas se ele pertencer ao arquivo informado **e** o
+   * arquivo não tiver sido trocado desde o upload.
+   */
   get(mediaPath: string): string | undefined {
-    return this.data?.mediaPath === mediaPath ? this.data.fileId : undefined;
+    if (this.data?.mediaPath !== mediaPath) {
+      return undefined;
+    }
+    // Cache antigo, gravado antes da assinatura existir: descarta uma vez e
+    // regrava no próximo envio.
+    if (this.data.signature === undefined) {
+      return undefined;
+    }
+    if (this.data.signature !== fileSignature(mediaPath)) {
+      return undefined;
+    }
+    return this.data.fileId;
   }
 
   set(mediaPath: string, fileId: string): void {
-    this.data = { version: 1, mediaPath, fileId };
+    this.data = { version: 1, mediaPath, fileId, signature: fileSignature(mediaPath) };
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), { mode: 0o600 });
     } catch (error) {
       // Falha de cache não é fatal: na próxima vez o arquivo é reenviado.
       this.logger.warn('Falha ao gravar o cache de mídia.', error);
