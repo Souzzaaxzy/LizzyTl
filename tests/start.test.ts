@@ -173,7 +173,7 @@ describe('comando /start (com GIF disponível)', () => {
     });
   });
 
-  it('envia o GIF com legenda e botões na MESMA mensagem (sendAnimation)', async () => {
+  it('envia o GIF com legenda e botões na MESMA mensagem (sendDocument)', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
     const calls = stubTelegram();
@@ -182,24 +182,29 @@ describe('comando /start (com GIF disponível)', () => {
 
     const sends = calls.filter((call) => call.method !== 'getMe');
     assert.equal(sends.length, 1, 'GIF, legenda e botões devem ir em uma única mensagem');
-    assert.equal(sends[0]?.method, 'sendAnimation');
+    assert.equal(sends[0]?.method, 'sendDocument');
     assert.match(String(sends[0]?.payload.caption), /@gif_user/);
     const markup = sends[0]?.payload.reply_markup as { inline_keyboard: unknown[][] };
     assert.equal(markup.inline_keyboard.flat().length, 4);
   });
 
-  it('envia o arquivo com nome .gif para chegar como animação, não como vídeo', async () => {
+  it('envia o arquivo como documento .gif para preservar a extensão', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
     registerStartCommand(bot, { config: { startGifPath: gifPath }, logger: silentLogger });
     const calls = stubTelegram();
 
     await bot.handleUpdate(startUpdate(4, { id: 11, username: 'gif_nome' }));
 
-    const animation = calls.find((call) => call.method === 'sendAnimation')?.payload
-      .animation as { filename?: string } | undefined;
-    assert.ok(animation, 'deve enviar uma animação');
-    // Sem o filename, o Telegraf envia "animation.mp4" e o Telegram exibe vídeo.
-    assert.equal(animation.filename, 'start.gif');
+    const doc = calls.find((call) => call.method === 'sendDocument')?.payload
+      .document as { filename?: string } | undefined;
+    assert.ok(doc, 'deve enviar o arquivo como documento');
+    // O nome precisa ser .gif; o sendAnimation entregaria .mp4.
+    assert.equal(doc.filename, 'start.gif');
+    assert.equal(
+      calls.some((call) => call.method === 'sendAnimation'),
+      false,
+      'não deve usar sendAnimation, que converte para mp4',
+    );
   });
 });
 

@@ -67,11 +67,12 @@ export function registerStartCommand(bot: Telegraf, deps: StartCommandDeps): voi
     }
 
     try {
-      // O Telegraf nomeia streams sem nome como "animation.mp4", e o Telegram
-      // entrega isso como vídeo. Informar o filename faz o arquivo chegar como
-      // animação (.gif). O nome é derivado do caminho configurado, então
-      // trocar START_GIF_PATH continua funcionando sem mexer nesta lógica.
-      await ctx.replyWithAnimation(
+      // O sendAnimation faz o Telegram converter o GIF em MP4 internamente
+      // (a classe Animation da API e "GIF ou H.264/MPEG-4 AVC"), por isso o
+      // arquivo chegava como .mp4. Enviar como documento preserva o arquivo
+      // .gif, mantem a previa animada no Telegram e aceita legenda + botoes
+      // na mesma mensagem.
+      await ctx.replyWithDocument(
         {
           source: fs.createReadStream(deps.config.startGifPath),
           filename: path.basename(deps.config.startGifPath),
