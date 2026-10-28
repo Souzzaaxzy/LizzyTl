@@ -17,6 +17,16 @@ import type { BaileysModule } from '../src/whatsapp/baileys-types.js';
 
 const silentLogger = createLogger('error');
 
+/** Store em memória: o número é informado em tempo de execução. */
+function fakeStore(inicial?: string) {
+  let numero = inicial;
+  return {
+    getNumber: () => numero,
+    setNumber: (n: string) => { numero = n; },
+    clear: () => { numero = undefined; },
+  };
+}
+
 /** Socket falso: registra o que foi chamado, sem abrir conexão. */
 function fakeSocket() {
   const handlers = new Map<string, (...args: unknown[]) => void>();
@@ -54,20 +64,23 @@ function fakeModule(socket: ReturnType<typeof fakeSocket>['socket']): BaileysMod
   } as unknown as BaileysModule;
 }
 
-function makeClient(deps: Partial<Parameters<typeof WhatsAppClient.prototype.start>> = {}) {
+function makeClient(numeroInicial: string | null = '5511999999999') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lizzy-wa-'));
   const { socket, chamadas } = fakeSocket();
+  // null significa "sem número": undefined acionaria o valor padrão do parâmetro.
+  const store = fakeStore(numeroInicial ?? undefined);
+  const codigos: string[] = [];
   const client = new WhatsAppClient({
     config: {
-      whatsappNumber: '5511999999999',
       whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
       whatsappAuthDir: dir,
     },
     logger: silentLogger,
+    store,
     loadModule: async () => fakeModule(socket),
-    ...deps,
+    onPairingCode: (c) => codigos.push(c),
   });
-  return { client, socket, chamadas, dir };
+  return { client, socket, chamadas, dir, store, codigos };
 }
 
 describe('normalizeWhatsappNumber', () => {
@@ -108,14 +121,14 @@ describe('isValidPairingCode', () => {
 });
 
 describe('WhatsAppClient', () => {
-  it('fica desligado sem número configurado, sem tentar conectar', async () => {
+  it('fica desligado sem número informado, sem tentar conectar', async () => {
     const client = new WhatsAppClient({
       config: {
-        whatsappNumber: undefined,
         whatsappPairingCode: DEFAULT_WHATSAPP_PAIRING_CODE,
         whatsappAuthDir: '/tmp/nao-usado',
       },
       logger: silentLogger,
+      store: fakeStore(undefined),
       loadModule: async () => {
         throw new Error('não deveria carregar o pacote');
       },
@@ -125,17 +138,17 @@ describe('WhatsAppClient', () => {
 
     assert.equal(client.getStatus().state, 'desligado');
     assert.equal(client.isConnected(), false);
-    assert.match(client.getStatus().summary, /WHATSAPP_NUMBER/);
+    assert.match(client.getStatus().summary, /Conectar WhatsApp/);
   });
 
   it('recusa código de pareamento inválido antes de conectar', async () => {
     const client = new WhatsAppClient({
       config: {
-        whatsappNumber: '5511999999999',
         whatsappPairingCode: 'lizz-ybot',
         whatsappAuthDir: '/tmp/nao-usado',
       },
       logger: silentLogger,
+      store: fakeStore('5511999999999'),
       loadModule: async () => {
         throw new Error('não deveria carregar o pacote');
       },
@@ -148,7 +161,7 @@ describe('WhatsAppClient', () => {
   });
 
   it('pede o pareamento com o código configurado', async () => {
-    const { client, chamadas } = makeClient();
+    const { client, chamadas, codigos } = makeClient();
 
     await client.start();
 
@@ -158,6 +171,39 @@ describe('WhatsAppClient', () => {
     assert.equal(pedido?.args[1], 'L1ZZYB9T', 'deve usar o código da Lizzy');
     assert.equal(client.getStatus().state, 'aguardando_pareamento');
     assert.match(client.getStatus().summary, /L1ZZYB9T/);
+    assert.deepEqual(codigos, ['L1ZZYB9T'], 'o código é avisado para o bot enviar no chat');
+  });
+
+  it('connectNumber normaliza, guarda e conecta com o número informado', async () => {
+    const { client, chamadas, store } = makeClient(null);
+
+    await client.connectNumber('+55 (11) 98888-7777');
+
+    assert.equal(store.getNumber(), '5511988887777', 'guarda só dígitos');
+    const pedido = chamadas.find((c) => c.metodo === 'requestPairingCode');
+    assert.equal(pedido?.args[0], '5511988887777');
+  });
+
+  it('recusa número curto demais sem tentar conectar', async () => {
+    const { client, chamadas, store } = makeClient(null);
+
+    await client.connectNumber('123');
+
+    assert.equal(client.getStatus().state, 'erro');
+    assert.match(client.getStatus().summary, /inválido/i);
+    assert.equal(store.getNumber(), undefined, 'não guarda número inválido');
+    assert.equal(chamadas.length, 0, 'não tenta conectar');
+  });
+
+  it('desconectar esquece o número e apaga a sessão', async () => {
+    const { client, store } = makeClient();
+
+    await client.start();
+    client.desconectar();
+
+    assert.equal(store.getNumber(), undefined);
+    assert.equal(client.getStatus().state, 'desligado');
+    assert.equal(client.isConnected(), false);
   });
 
   it('não afirma conectado antes de a conexão abrir', async () => {

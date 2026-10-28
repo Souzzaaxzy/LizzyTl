@@ -192,32 +192,32 @@ preenchida nunca desligar a proteção.
 
 ## WhatsApp
 
-A conexão usa o fork `@souzzaaxzy/baileys` (Baileys v7 com extensões). Ela é
+A conexão usa o fork `@souzzaaxzy/baileys` (Baileys v7 com extensões) e é
 **independente do Telegram**: uma falha em uma não derruba a outra.
 
-### Configurar
+### Conectar pelo Telegram
 
-```env
-WHATSAPP_NUMBER=5511999999999
-WHATSAPP_PAIRING_CODE=L1ZZYB9T
-```
+Não é preciso editar arquivo nenhum. No Telegram:
 
-Sem `WHATSAPP_NUMBER`, o WhatsApp fica desligado e o bot só roda o Telegram.
-O número vai com código do país e **só dígitos** — `+`, espaço e traço são
-removidos automaticamente.
+1. Abra `/start` e toque em **📱 WhatsApp**
+2. Toque em **🔗 Conectar WhatsApp** (o botão só aparece para o dono)
+3. Envie o número, com código do país e só dígitos: `5511999999999`
+4. O bot responde com o **código de pareamento** aqui mesmo no chat
 
-### Parear
+No celular: **WhatsApp → Aparelhos conectados → Conectar aparelho → Conectar
+com número de telefone**, e digite o código. Ele expira em cerca de um minuto;
+se expirar, toque em Conectar de novo.
 
-O pareamento é por **código**, não por QR: no Termux o terminal é pequeno e ler
-um QR é ruim. Ao iniciar, o bot imprime o código no log:
+O número fica salvo em `data/whatsapp.json` (não versionado), então sobrevive
+ao reinício e não precisa ser digitado de novo.
 
-```
-[lizzy:whatsapp] Código de pareamento do WhatsApp: L1ZZYB9T
-[lizzy:whatsapp] No celular: WhatsApp > Aparelhos conectados > Conectar aparelho
-                 > Conectar com número de telefone.
-```
+Para trocar de número ou refazer o pareamento, use **🔌 Desconectar** e conecte
+novamente. Isso apaga a sessão antiga, que só atrapalharia.
 
-No celular, use esse código. Ele vale uma vez e expira em cerca de um minuto.
+### Por que pareamento por código, e não QR
+
+No Termux o terminal é pequeno e ler um QR é ruim. O código chega pelo próprio
+Telegram, então você pode parear de qualquer lugar.
 
 ### Sobre o código L1ZZYB9T
 
@@ -227,8 +227,7 @@ I, O, L nem símbolos** (é proposital, evita confundir I/1 e O/0 ao digitar).
 
 Por isso `lizz-ybot` é impossível: tem 9 caracteres e usa `i`, `-` e `o`.
 `L1ZZYB9T` é o mais próximo — lê-se como "Lizzybot" (o `1` faz o papel do `i`,
-o `9` o do `o`). O código é validado antes de tentar conectar, então um valor
-inválido no `.env` produz uma mensagem clara em vez de erro técnico.
+o `9` o do `o`). Para trocar, defina `WHATSAPP_PAIRING_CODE` no `.env`.
 
 ### Estados possíveis
 
@@ -236,9 +235,9 @@ A tela 📱 WhatsApp mostra o estado **real**, nunca "conectado" sem conexão:
 
 | Estado | Significado |
 | --- | --- |
-| 🔴 Desligado | Sem `WHATSAPP_NUMBER`, ou encerrado |
+| 🔴 Desligado | Sem número, ou desconectado |
 | 🟡 Conectando | Abrindo a conexão |
-| 🟡 Aguardando pareamento | Código gerado, esperando o celular |
+| 🟡 Aguardando pareamento | Código enviado, esperando o celular |
 | 🟢 Conectado | Sessão aberta e validada |
 | 🔴 Erro | Falha, com o motivo na própria tela |
 
@@ -246,8 +245,8 @@ A tela 📱 WhatsApp mostra o estado **real**, nunca "conectado" sem conexão:
 
 A sessão autenticada fica em `data/whatsapp-auth/`, que **não é versionado**.
 A conexão reconecta sozinha com espera crescente. Se você encerrar a sessão no
-celular, o bot avisa e não fica tentando reconectar em vão — para parear de
-novo, apague `data/whatsapp-auth` e reinicie.
+celular, o bot avisa e não fica tentando reconectar em vão — use Desconectar e
+Conectar de novo.
 
 ### Chamadas de voz
 

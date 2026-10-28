@@ -15,6 +15,7 @@ import { registerStartCommand } from '../src/telegram/commands/start.js';
 import { createBot } from '../src/telegram/client.js';
 import { isNotModified, registerCallbackHandler } from '../src/telegram/handlers/callback-handler.js';
 import { registerMessageHandler } from '../src/telegram/handlers/message-handler.js';
+import { PendingActions } from '../src/telegram/state/pending-action.js';
 import { registerRateLimit } from '../src/telegram/handlers/rate-limit.js';
 import { RateLimiter } from '../src/core/rate-limiter.js';
 import { BOT_COMMANDS, CALLBACKS, resolveDisplayName } from '../src/telegram/screens/screens.js';
@@ -392,7 +393,7 @@ describe('comando /help', () => {
 describe('mensagens que não são comandos', () => {
   it('responde texto solto apontando para o menu, sem ficar mudo', async () => {
     const bot = createBot({ token: '111:TESTE', logger: silentLogger });
-    registerMessageHandler(bot, { logger: silentLogger });
+    registerMessageHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() as never, pendingActions: new PendingActions() });
     const calls = stubTelegram();
 
     await bot.handleUpdate(textUpdate(60, 'oi'));
@@ -413,7 +414,7 @@ describe('mensagens que não são comandos', () => {
       mediaCache: makeCache(),
       whatsapp: fakeWhatsapp(),
     });
-    registerMessageHandler(bot, { logger: silentLogger });
+    registerMessageHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() as never, pendingActions: new PendingActions() });
     const calls = stubTelegram();
 
     await bot.handleUpdate(startUpdate(61, { id: 9500, username: 'prioridade' }));
@@ -541,7 +542,7 @@ describe('proteção contra abuso', () => {
       mediaCache: makeCache(),
       whatsapp: fakeWhatsapp(),
     });
-    registerMessageHandler(bot, { logger: silentLogger });
+    registerMessageHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() as never, pendingActions: new PendingActions() });
     return { bot, users };
   }
 
@@ -645,7 +646,7 @@ describe('regressões encontradas na auditoria', () => {
       mediaCache: makeCache(),
       whatsapp: fakeWhatsapp(),
     });
-    registerMessageHandler(bot, { logger: silentLogger });
+    registerMessageHandler(bot, { logger: silentLogger, users: makeStore(), whatsapp: fakeWhatsapp() as never, pendingActions: new PendingActions() });
     const calls = stubTelegram();
 
     const grupo = { id: -1001234567890, type: 'supergroup' as const, title: 'Grupo' };

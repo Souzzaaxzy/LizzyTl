@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 
 import type { Config } from '../config/config.js';
 import type { Logger } from '../core/logger.js';
+import type { WhatsappConfigStore } from '../data/whatsapp-config-store.js';
 import {
   loadBaileys,
   type BaileysConnectionUpdate,
@@ -32,6 +33,11 @@ export type WhatsAppState =
   | 'conectado'
   | 'erro';
 
+/** Estados em que o dono precisa informar um número para prosseguir. */
+export function precisaDeNumero(state: WhatsAppState): boolean {
+  return state === 'desligado';
+}
+
 export interface WhatsAppStatus {
   state: WhatsAppState;
   /** Texto curto e verdadeiro sobre o estado atual, usado na tela do menu. */
@@ -39,12 +45,19 @@ export interface WhatsAppStatus {
 }
 
 export interface WhatsAppClientDeps {
-  config: Pick<Config, 'whatsappNumber' | 'whatsappPairingCode' | 'whatsappAuthDir'>;
+  config: Pick<Config, 'whatsappPairingCode' | 'whatsappAuthDir'>;
   logger: Logger;
+  /**
+   * Onde o número fica guardado. O dono informa pelo Telegram, então o valor
+   * chega em tempo de execução, não na configuração estática.
+   */
+  store: Pick<WhatsappConfigStore, 'getNumber' | 'setNumber' | 'clear'>;
   /** Injetável para testar sem abrir conexão real. */
   createSocket?: BaileysMakeSocket;
   /** Injetável para testar sem ler o pacote do disco. */
   loadModule?: () => Promise<BaileysModule>;
+  /** Avisa quando o pareamento está pronto, para o bot mandar o código no chat. */
+  onPairingCode?: (code: string) => void;
 }
 
 /** Logger silencioso: o Baileys é muito verboso e poluiria o log da Lizzy. */
@@ -88,18 +101,24 @@ export class WhatsAppClient {
   private readonly logger: Logger;
   private readonly createSocket: BaileysMakeSocket | undefined;
   private readonly loadModule: () => Promise<BaileysModule>;
+  private readonly store: WhatsAppClientDeps['store'];
+  private readonly onPairingCode: ((code: string) => void) | undefined;
   private socket: BaileysSocket | null = null;
   private status: WhatsAppStatus = { state: 'desligado', summary: 'Desligado.' };
   private parado = false;
   private tentativa = 0;
   /** Código que indica sessão encerrada no celular, vindo do fork. */
   private loggedOutCode: number | undefined;
+  /** Número da conexão em andamento, para o pareamento e a reconexão. */
+  private numeroAtual: string | undefined;
 
   constructor(deps: WhatsAppClientDeps) {
     this.config = deps.config;
     this.logger = deps.logger.child('whatsapp');
     this.createSocket = deps.createSocket;
     this.loadModule = deps.loadModule ?? loadBaileys;
+    this.store = deps.store;
+    this.onPairingCode = deps.onPairingCode;
   }
 
   /** Estado atual, para a tela do menu. */
@@ -117,19 +136,63 @@ export class WhatsAppClient {
   }
 
   /**
-   * Inicia a conexão. Sem número configurado, fica desligado em vez de tentar
-   * conectar — o operador precisa saber que falta configuração.
+   * Inicia a conexão com o número já guardado. Sem número, fica desligado: o
+   * dono informa pelo Telegram quando quiser.
    */
   async start(): Promise<void> {
-    if (this.config.whatsappNumber === undefined) {
+    const numero = this.store.getNumber();
+    if (numero === undefined) {
       this.setStatus(
         'desligado',
-        'Desligado: defina WHATSAPP_NUMBER no .env para conectar.',
+        'Desligado. Toque em "Conectar WhatsApp" para informar o número.',
       );
-      this.logger.info('WhatsApp desligado: WHATSAPP_NUMBER não configurado.');
+      this.logger.info('WhatsApp desligado: nenhum número informado ainda.');
+      return;
+    }
+    await this.connectWith(numero);
+  }
+
+  /**
+   * Conecta usando um número informado agora. Guarda antes de tentar, para o
+   * valor sobreviver a um reinício mesmo se a conexão falhar.
+   */
+  async connectNumber(rawNumber: string): Promise<void> {
+    const numero = normalizeWhatsappNumber(rawNumber);
+    if (numero.length < 10) {
+      this.setStatus(
+        'erro',
+        'Número inválido: informe com código do país, só dígitos. Ex.: 5511999999999',
+      );
       return;
     }
 
+    this.store.setNumber(numero);
+    // Sessão antiga de outro número só atrapalha: o pareamento é por número.
+    this.apagarSessao();
+    await this.connectWith(numero);
+  }
+
+  /** Remove a sessão autenticada, forçando um pareamento novo. */
+  apagarSessao(): void {
+    try {
+      fs.rmSync(this.config.whatsappAuthDir, { recursive: true, force: true });
+    } catch (error) {
+      this.logger.warn('Falha ao apagar a sessão do WhatsApp.', error);
+    }
+  }
+
+  /** Esquece o número e a sessão, voltando ao estado desligado. */
+  desconectar(): void {
+    this.stop();
+    this.store.clear();
+    this.apagarSessao();
+    this.setStatus(
+      'desligado',
+      'Desligado. Toque em "Conectar WhatsApp" para informar o número.',
+    );
+  }
+
+  private async connectWith(numero: string): Promise<void> {
     if (!isValidPairingCode(this.config.whatsappPairingCode)) {
       this.setStatus(
         'erro',
@@ -142,12 +205,12 @@ export class WhatsAppClient {
       );
       return;
     }
-
-    await this.connect();
+    await this.connect(numero);
   }
 
-  private async connect(): Promise<void> {
+  private async connect(numero: string): Promise<void> {
     this.parado = false;
+    this.numeroAtual = numero;
     this.setStatus('conectando', 'Conectando...');
 
     try {
@@ -189,7 +252,7 @@ export class WhatsAppClient {
    */
   private async requestPairing(): Promise<void> {
     const socket = this.socket;
-    const numero = this.config.whatsappNumber;
+    const numero = this.numeroAtual;
     if (socket === null || numero === undefined) {
       return;
     }
@@ -205,15 +268,12 @@ export class WhatsAppClient {
       const codigo = await pedirCodigo.call(socket, numero, this.config.whatsappPairingCode);
       this.setStatus(
         'aguardando_pareamento',
-        `Aguardando pareamento. No WhatsApp, abra Aparelhos conectados e use o código ${codigo}.`,
+        `Aguardando pareamento. Use o código ${codigo} no WhatsApp.`,
       );
-      // O código é mostrado no terminal de propósito: é assim que o operador
-      // pareia. Não é segredo — vale só uma vez e expira em cerca de um minuto.
+      // O código não é segredo: vale uma vez e expira em cerca de um minuto.
+      // Fica no log como referência e é enviado ao dono pelo callback.
       this.logger.info(`Código de pareamento do WhatsApp: ${codigo}`);
-      this.logger.info(
-        'No celular: WhatsApp > Aparelhos conectados > Conectar aparelho > ' +
-          'Conectar com número de telefone.',
-      );
+      this.onPairingCode?.(codigo);
     } catch (error) {
       this.logger.error('Falha ao pedir o código de pareamento.', error);
       this.setStatus('erro', 'Não foi possível gerar o código de pareamento. Veja o log.');
@@ -260,9 +320,10 @@ export class WhatsAppClient {
     const esperaMs = Math.min(30_000, 2_000 * this.tentativa);
     this.logger.info(`Nova tentativa de conexão em ${Math.round(esperaMs / 1000)}s.`);
 
+    const numero = this.numeroAtual;
     const timer = setTimeout(() => {
-      if (!this.parado) {
-        void this.connect();
+      if (!this.parado && numero !== undefined) {
+        void this.connect(numero);
       }
     }, esperaMs);
     // Não segura o processo aberto no encerramento.

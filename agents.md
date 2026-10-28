@@ -133,9 +133,12 @@ exibir como animação, e nessa reencodagem o loop se perde.
 - Telas restritas: marque `ownerOnly: true` na tela. O handler de callbacks
   confere `users.isOwner(ctx.from.id)` antes de renderizar. **Nunca** confie no
   payload do callback para autorização — ele vem do cliente e pode ser forjado.
-- Ao criar um prefixo novo de callback, adicione-o ao filtro `bot.action(/^..._/)`
-  em `callback-handler.ts`. Sem isso o callback cai no fallback e a tela nunca
-  abre (foi um bug real ao criar o painel).
+- O filtro `bot.action` é **derivado de `CALLBACKS`**, então um prefixo novo
+  entra sozinho. Mas um callback novo ainda precisa de **tela** em
+  `screenForCallback` ou de **tratamento explícito** no handler. O teste
+  "callbacks alcançáveis" falha se você esquecer — isso já causou bug duas vezes.
+- Ações que não são navegação (ex.: conectar/desconectar) devem ser tratadas
+  **antes** da checagem `screen === undefined`, senão caem no fallback.
 - Proteção contra abuso: `RateLimiter` (`src/core/rate-limiter.ts`) é puro e
   testável com relógio injetável. O middleware fica em
   `handlers/rate-limit.ts` e **precisa ser registrado antes dos comandos**,

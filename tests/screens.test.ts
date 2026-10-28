@@ -339,3 +339,33 @@ describe('painel do dono', () => {
     assert.equal(screenForCallback(CALLBACKS.ADMIN_USERS)?.id, 'adminUsers');
   });
 });
+
+
+describe('callbacks alcançáveis', () => {
+  it('todo callback é navegação ou tem tratamento explícito', () => {
+    // Este teste existe porque o mesmo bug apareceu duas vezes: um callback
+    // novo cujo prefixo não entrava no filtro, ou que não tinha tela, caía no
+    // fallback em silêncio e o botão simplesmente não fazia nada.
+    const ACOES = new Set<string>([CALLBACKS.WA_CONNECT, CALLBACKS.WA_DISCONNECT]);
+
+    for (const cb of Object.values(CALLBACKS)) {
+      const temTela = screenForCallback(cb) !== undefined;
+      const temAcao = ACOES.has(cb);
+      assert.ok(temTela || temAcao, `callback "${cb}" não leva a lugar nenhum`);
+    }
+  });
+
+  it('todo prefixo de callback é coberto pelo filtro do handler', () => {
+    // O filtro é derivado de CALLBACKS, então todo prefixo deve casar.
+    const prefixos = [...new Set(Object.values(CALLBACKS).map((c) => c.split('_')[0]))];
+    const filtro = new RegExp(`^(${prefixos.join('|')})_`);
+    for (const cb of Object.values(CALLBACKS)) {
+      assert.ok(filtro.test(cb), `"${cb}" não casa com o filtro do handler`);
+    }
+  });
+
+  it('as ações do WhatsApp não são navegação', () => {
+    assert.equal(screenForCallback(CALLBACKS.WA_CONNECT), undefined);
+    assert.equal(screenForCallback(CALLBACKS.WA_DISCONNECT), undefined);
+  });
+});

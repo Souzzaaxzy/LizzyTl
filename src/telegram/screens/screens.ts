@@ -24,6 +24,8 @@ export const CALLBACKS = {
   MENU_WHATSAPP: 'menu_whatsapp',
   MENU_ABOUT: 'menu_about',
   NAV_BACK: 'nav_back',
+  WA_CONNECT: 'wa_connect',
+  WA_DISCONNECT: 'wa_disconnect',
   ADMIN_HOME: 'admin_home',
   ADMIN_STATS: 'admin_stats',
   ADMIN_USERS: 'admin_users',
@@ -278,6 +280,25 @@ export function adminKeyboard(): InlineKeyboardMarkup {
  * Teclado das telas internas do painel. O Voltar retorna ao hub, para o dono
  * navegar entre as telas sem passar pelo menu a cada vez.
  */
+/**
+ * Teclado da tela do WhatsApp. O botão de conectar só aparece para o dono,
+ * porque só ele informa o número do bot. Quem não é dono só vê o estado.
+ */
+export function whatsappKeyboard(context: ScreenContext): InlineKeyboardMarkup {
+  if (!context.admin) {
+    return backKeyboard();
+  }
+  const conectado = context.whatsapp?.state === 'conectado';
+  const acao = conectado
+    ? Markup.button.callback('🔌 Desconectar', CALLBACKS.WA_DISCONNECT)
+    : Markup.button.callback('🔗 Conectar WhatsApp', CALLBACKS.WA_CONNECT);
+
+  return Markup.inlineKeyboard([
+    [acao],
+    [Markup.button.callback(BACK_BUTTON_LABEL, CALLBACKS.NAV_BACK)],
+  ]).reply_markup;
+}
+
 export function adminBackKeyboard(): InlineKeyboardMarkup {
   return Markup.inlineKeyboard([
     Markup.button.callback(BACK_BUTTON_LABEL, CALLBACKS.ADMIN_HOME),
@@ -354,13 +375,24 @@ export function buildWhatsappCaption(context: ScreenContext): string {
       'Estado indisponível no momento.',
     ].join('\n');
   }
-  return [
+  const linhas = [
     '📱 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
     '',
     `♛ 𝐄𝐬𝐭𝐚𝐝𝐨: ${WHATSAPP_STATE_LABELS[status.state]}`,
     '',
     `✦ ${escapeHtml(status.summary)}`,
-  ].join('\n');
+  ];
+
+  // Só o dono configura o número; os demais apenas veem o estado.
+  if (context.admin && status.state !== 'conectado') {
+    linhas.push(
+      '',
+      '♛ 𝐓𝐨𝐪𝐮𝐞 𝐞𝐦 "𝐂𝐨𝐧𝐞𝐜𝐭𝐚𝐫 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩" 𝐞 𝐞𝐧𝐯𝐢𝐞 𝐨 𝐧𝐮́𝐦𝐞𝐫𝐨 𝐜𝐨𝐦 𝐨',
+      '  𝐜𝐨́𝐝𝐢𝐠𝐨 𝐝𝐨 𝐩𝐚𝐢́𝐬. 𝐄𝐱.: 5511999999999',
+    );
+  }
+
+  return linhas.join('\n');
 }
 
 /** As telas internas compartilham o botão de voltar. */
@@ -389,7 +421,7 @@ export const SCREENS: Record<ScreenId, Screen> = {
   whatsapp: {
     id: 'whatsapp',
     buildCaption: buildWhatsappCaption,
-    buildKeyboard: fixedKeyboard(backKeyboard),
+    buildKeyboard: whatsappKeyboard,
   },
   about: {
     id: 'about',

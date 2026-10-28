@@ -14,8 +14,10 @@ import type { Context, Telegraf } from 'telegraf';
 
 import type { Logger } from '../../core/logger.js';
 import type { UserStore } from '../../data/user-store.js';
+import type { PendingActions } from '../state/pending-action.js';
 import type { WhatsAppClient } from '../../whatsapp/client.js';
 import {
+  CALLBACKS,
   screenContext,
   screenForCallback,
   type Screen,
@@ -27,6 +29,10 @@ export interface CallbackHandlerDeps {
   users: UserStore;
   /** Fonte do estado real do WhatsApp, mostrado na tela correspondente. */
   whatsapp?: Pick<WhatsAppClient, 'getStatus'>;
+  /** Cliente completo, para ações que mudam o estado (conectar/desconectar). */
+  whatsappFull?: Pick<WhatsAppClient, 'desconectar'>;
+  /** Ações que esperam a próxima mensagem do usuário. */
+  pendingActions?: PendingActions;
 }
 
 /**
@@ -117,13 +123,79 @@ async function renderScreen(
   }
 }
 
+/**
+ * Pede o número ao dono. A próxima mensagem dele é interpretada como número,
+ * não como texto comum — é para isso que serve a ação pendente.
+ */
+async function handleWhatsappConnect(
+  ctx: Context,
+  deps: CallbackHandlerDeps,
+): Promise<void> {
+  const userId = ctx.from?.id;
+  // A checagem é refeita aqui: o callback pode ser forjado por qualquer um.
+  if (userId === undefined || !deps.users.isOwner(userId)) {
+    deps.logger.warn(
+      `Tentativa de conectar o WhatsApp pelo usuário ${userId ?? 'desconhecido'}.`,
+    );
+    await ctx.answerCbQuery('Acesso restrito.');
+    return;
+  }
+
+  await ctx.answerCbQuery();
+  deps.pendingActions?.set(userId, 'whatsapp_number');
+  await ctx
+    .reply(
+      [
+        '📱 𝐂𝐨𝐧𝐞𝐜𝐭𝐚𝐫 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
+        '',
+        '♛ 𝐄𝐧𝐯𝐢𝐞 𝐨 𝐧𝐮́𝐦𝐞𝐫𝐨 𝐝𝐨 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐪𝐮𝐞 𝐯𝐚𝐢 𝐫𝐨𝐝𝐚𝐫 𝐚 𝐋𝐢𝐳𝐳𝐲.',
+        '',
+        '✦ 𝐂𝐨𝐦 𝐜𝐨́𝐝𝐢𝐠𝐨 𝐝𝐨 𝐩𝐚𝐢́𝐬 𝐞 𝐬𝐨́ 𝐝𝐢́𝐠𝐢𝐭𝐨𝐬. 𝐄𝐱.: 5511999999999',
+        '',
+        '♛ 𝐎 𝐜𝐨́𝐝𝐢𝐠𝐨 𝐝𝐞 𝐩𝐚𝐫𝐞𝐚𝐦𝐞𝐧𝐭𝐨 𝐜𝐡𝐞𝐠𝐚 𝐚𝐪𝐮𝐢 𝐧𝐞𝐬𝐭𝐞 𝐜𝐡𝐚𝐭.',
+      ].join('\n'),
+      { parse_mode: 'HTML' },
+    )
+    .catch(() => undefined);
+}
+
+/** Desconecta o WhatsApp, apaga a sessão e esquece o número. */
+async function handleWhatsappDisconnect(
+  ctx: Context,
+  deps: CallbackHandlerDeps,
+): Promise<void> {
+  const userId = ctx.from?.id;
+  if (userId === undefined || !deps.users.isOwner(userId)) {
+    await ctx.answerCbQuery('Acesso restrito.');
+    return;
+  }
+
+  deps.pendingActions?.clear(userId);
+  deps.whatsappFull?.desconectar();
+  await ctx.answerCbQuery('WhatsApp desconectado.');
+  await renderScreen(ctx, screenForCallback(CALLBACKS.MENU_WHATSAPP)!, deps);
+}
+
 export function registerCallbackHandler(bot: Telegraf, deps: CallbackHandlerDeps): void {
   const logger = deps.logger.child('callbacks');
 
-  // Prefixos conhecidos. Um prefixo novo precisa ser adicionado aqui, senão o
-  // callback cai no fallback e a tela nunca abre.
-  bot.action(/^(menu|nav|admin)_/, async (ctx) => {
+  // Prefixos conhecidos. Derivado de CALLBACKS para não haver dois lugares
+  // onde esquecer de registrar um prefixo novo (isso já causou bug duas vezes).
+  const prefixos = [...new Set(Object.values(CALLBACKS).map((c) => c.split('_')[0]))].join('|');
+  bot.action(new RegExp(`^(${prefixos})_`), async (ctx) => {
     const callbackData = extractCallbackData(ctx.callbackQuery);
+
+    // Ações primeiro: elas não são navegação e não têm tela correspondente,
+    // então precisam ser tratadas antes da checagem de tela.
+    if (callbackData === CALLBACKS.WA_CONNECT) {
+      await handleWhatsappConnect(ctx, deps);
+      return;
+    }
+    if (callbackData === CALLBACKS.WA_DISCONNECT) {
+      await handleWhatsappDisconnect(ctx, deps);
+      return;
+    }
+
     const screen = screenForCallback(callbackData);
 
     if (screen === undefined) {

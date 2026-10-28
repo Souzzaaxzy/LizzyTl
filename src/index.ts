@@ -23,6 +23,8 @@ import { createBot } from './telegram/client.js';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler.js';
 import { registerMessageHandler } from './telegram/handlers/message-handler.js';
 import { registerRateLimit } from './telegram/handlers/rate-limit.js';
+import { WhatsappConfigStore } from './data/whatsapp-config-store.js';
+import { PendingActions } from './telegram/state/pending-action.js';
 import { WhatsAppClient } from './whatsapp/client.js';
 
 async function main(): Promise<void> {
@@ -48,11 +50,43 @@ async function main(): Promise<void> {
 
   const logger = createLogger(config.logLevel);
 
+  // O número do WhatsApp é informado pelo dono no próprio Telegram, então fica
+  // em disco para sobreviver ao reinício.
+  const whatsappStore = new WhatsappConfigStore(config.dataDir, logger);
+  const pendingActions = new PendingActions();
+
   // O WhatsApp é independente do Telegram: sobe em paralelo e uma falha aqui
   // não impede o bot do Telegram de funcionar.
   const whatsapp = new WhatsAppClient({
     config,
     logger,
+    store: whatsappStore,
+    // O código de pareamento é enviado ao dono no chat, não só no log.
+    onPairingCode: (codigo) => {
+      const dono = config.ownerTelegramId;
+      if (dono === undefined) {
+        return;
+      }
+      void bot.telegram
+        .sendMessage(
+          dono,
+          [
+            '📱 𝐂𝐨́𝐝𝐢𝐠𝐨 𝐝𝐞 𝐩𝐚𝐫𝐞𝐚𝐦𝐞𝐧𝐭𝐨 𝐝𝐨 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩',
+            '',
+            `♛ <code>${codigo}</code>`,
+            '',
+            '✦ 𝐍𝐨 𝐜𝐞𝐥𝐮𝐥𝐚𝐫: WhatsApp → Aparelhos conectados → Conectar aparelho →',
+            '  Conectar com número de telefone.',
+            '',
+            '♛ 𝐎 𝐜𝐨́𝐝𝐢𝐠𝐨 𝐞𝐱𝐩𝐢𝐫𝐚 𝐞𝐦 𝐜𝐞𝐫𝐜𝐚 𝐝𝐞 𝟏 𝐦𝐢𝐧𝐮𝐭𝐨. Se expirar, toque em',
+            '  Conectar de novo.',
+          ].join('\n'),
+          { parse_mode: 'HTML' },
+        )
+        .catch((error: unknown) => {
+          logger.error('Falha ao enviar o código de pareamento no Telegram.', error);
+        });
+    },
   });
 
   const users = new UserStore({
@@ -76,8 +110,8 @@ async function main(): Promise<void> {
   // mensagens por último, para ela só tratar o que ninguém mais tratou.
   registerStartCommand(bot, { config, logger, users, mediaCache, whatsapp });
   registerHelpCommand(bot, { logger });
-  registerCallbackHandler(bot, { logger, users, whatsapp });
-  registerMessageHandler(bot, { logger });
+  registerCallbackHandler(bot, { logger, users, whatsapp, pendingActions });
+  registerMessageHandler(bot, { logger, users, whatsapp, pendingActions });
 
   // Limpeza periódica do mapa do limitador, para ele não crescer sem limite.
   // unref() para o timer não segurar o processo aberto no encerramento.
