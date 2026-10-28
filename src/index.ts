@@ -13,6 +13,7 @@
 import { ConfigError, loadConfig } from './config/config';
 import { PROJECT_ROOT, loadEnvFile } from './config/env';
 import { createLogger } from './core/logger';
+import { RateLimiter } from './core/rate-limiter';
 import { MediaCache } from './data/media-cache';
 import { UserStore } from './data/user-store';
 import { registerHelpCommand } from './telegram/commands/help';
@@ -21,6 +22,7 @@ import { registerStartCommand } from './telegram/commands/start';
 import { createBot } from './telegram/client';
 import { registerCallbackHandler } from './telegram/handlers/callback-handler';
 import { registerMessageHandler } from './telegram/handlers/message-handler';
+import { registerRateLimit } from './telegram/handlers/rate-limit';
 import { getWhatsAppIntegrationStatus } from './whatsapp/client';
 
 async function main(): Promise<void> {
@@ -56,7 +58,15 @@ async function main(): Promise<void> {
   });
   const mediaCache = new MediaCache(config.dataDir, logger);
 
+  const limiter = new RateLimiter({
+    limit: config.rateLimitMax,
+    windowMs: config.rateLimitWindowSeconds * 1000,
+  });
+
   const bot = createBot({ token: config.telegramBotToken, logger });
+
+  // O limite vem primeiro: barra o abuso antes de qualquer trabalho caro.
+  registerRateLimit(bot, { limiter, logger, users });
 
   // Ordem importa: comandos e callbacks primeiro, e a resposta genérica a
   // mensagens por último, para ela só tratar o que ninguém mais tratou.
@@ -65,8 +75,14 @@ async function main(): Promise<void> {
   registerCallbackHandler(bot, { logger, users });
   registerMessageHandler(bot, { logger });
 
+  // Limpeza periódica do mapa do limitador, para ele não crescer sem limite.
+  // unref() para o timer não segurar o processo aberto no encerramento.
+  const pruneTimer = setInterval(() => limiter.prune(), 10 * 60 * 1000);
+  pruneTimer.unref();
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`Encerrando após ${signal}...`);
+    clearInterval(pruneTimer);
     try {
       bot.stop(signal);
     } catch (error) {

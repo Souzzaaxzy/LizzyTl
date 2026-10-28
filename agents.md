@@ -99,6 +99,10 @@ exibir como animação, e nessa reencodagem o loop se perde.
 - Ao criar um prefixo novo de callback, adicione-o ao filtro `bot.action(/^..._/)`
   em `callback-handler.ts`. Sem isso o callback cai no fallback e a tela nunca
   abre (foi um bug real ao criar o painel).
+- Proteção contra abuso: `RateLimiter` (`src/core/rate-limiter.ts`) é puro e
+  testável com relógio injetável. O middleware fica em
+  `handlers/rate-limit.ts` e **precisa ser registrado antes dos comandos**,
+  senão o trabalho caro já terá acontecido. O dono é isento.
 - **A ordem de registro no `index.ts` importa**: comandos e callbacks primeiro,
   `registerMessageHandler` por último. Ele é o fallback e só deve tratar o que
   ninguém mais tratou.

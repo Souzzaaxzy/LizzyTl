@@ -18,6 +18,7 @@ funcionalidade foi implementada nesta fase.
 - [Configuração do token](#configuração-do-token)
 - [Localização da mídia](#localização-da-mídia)
 - [Comandos](#comandos)
+- [Proteção contra abuso](#proteção-contra-abuso)
 - [Painel do dono](#painel-do-dono)
 - [Perfil](#perfil)
 - [Comandos para iniciar e compilar](#comandos-para-iniciar-e-compilar)
@@ -162,6 +163,31 @@ normalmente e apenas avisa no log.
 Qualquer outra mensagem recebe uma resposta apontando para o menu, em vez de
 silêncio. Isso evita a impressão de bot quebrado quando alguém digita algo
 inesperado.
+
+## Proteção contra abuso
+
+Sem limite, alguém (ou um script) pode martelar o bot e inflar o `data/users.json`
+com requisições. O bot limita quantas ações cada usuário pode fazer dentro de uma
+janela de tempo:
+
+| Variável | Padrão | O que faz |
+| --- | --- | --- |
+| `RATE_LIMIT_MAX` | `20` | Máximo de ações por usuário na janela |
+| `RATE_LIMIT_WINDOW_SECONDS` | `60` | Tamanho da janela, em segundos |
+
+O limite vale para comandos, callbacks e mensagens em geral. Ao estourar, o
+usuário recebe um aviso com o tempo de espera em vez de silêncio — ficar mudo
+pareceria bot quebrado. Um callback bloqueado também é respondido, senão o
+botão fica "carregando" para sempre no Telegram.
+
+O bloqueio acontece **antes** de qualquer trabalho caro: nada de ler arquivo,
+subir mídia ou escrever em disco. E uma requisição bloqueada não conta acesso no
+perfil.
+
+O dono é isento, porque administrar o bot envolve muitos cliques seguidos.
+
+Valores inválidos nas variáveis caem no padrão, para uma configuração mal
+preenchida nunca desligar a proteção.
 
 ## Painel do dono
 

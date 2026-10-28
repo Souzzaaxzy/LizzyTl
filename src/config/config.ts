@@ -22,6 +22,10 @@ export interface Config {
   dataDir: string;
   /** ID do dono do bot, quando configurado. Recebe o plano "dono". */
   ownerTelegramId?: number;
+  /** Máximo de ações por usuário dentro da janela. */
+  rateLimitMax: number;
+  /** Tamanho da janela do limite, em segundos. */
+  rateLimitWindowSeconds: number;
 }
 
 export interface LoadConfigOptions {
@@ -92,6 +96,19 @@ export function buildTokenHelp(options: {
  */
 export const DEFAULT_OWNER_TELEGRAM_ID = 8072791511;
 
+/**
+ * Lê um inteiro positivo do ambiente. Valor ausente, inválido ou não positivo
+ * cai no padrão, para uma variável mal preenchida nunca desligar a proteção.
+ */
+export function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  const texto = (raw ?? '').trim();
+  if (texto === '') {
+    return fallback;
+  }
+  const valor = Number(texto);
+  return Number.isInteger(valor) && valor > 0 ? valor : fallback;
+}
+
 export function loadConfig(options: LoadConfigOptions = {}): Config {
   const env = options.env ?? process.env;
   const projectRoot = options.projectRoot ?? path.resolve(__dirname, '..', '..');
@@ -111,6 +128,8 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const rawLogLevel = (env.LOG_LEVEL ?? '').trim().toLowerCase();
   const logLevel: LogLevel = isLogLevel(rawLogLevel) ? rawLogLevel : 'info';
   const dataDir = (env.DATA_DIR ?? '').trim() || 'data';
+  const rateLimitMax = parsePositiveInt(env.RATE_LIMIT_MAX, 20);
+  const rateLimitWindowSeconds = parsePositiveInt(env.RATE_LIMIT_WINDOW_SECONDS, 60);
   const rawOwnerId = (env.OWNER_TELEGRAM_ID ?? '').trim();
   const parsedOwnerId = rawOwnerId === '' ? DEFAULT_OWNER_TELEGRAM_ID : Number(rawOwnerId);
   const ownerTelegramId =
@@ -124,5 +143,7 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     logLevel,
     dataDir: path.isAbsolute(dataDir) ? dataDir : path.resolve(projectRoot, dataDir),
     ownerTelegramId,
+    rateLimitMax,
+    rateLimitWindowSeconds,
   };
 }

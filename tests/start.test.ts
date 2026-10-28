@@ -15,6 +15,8 @@ import { registerStartCommand } from '../src/telegram/commands/start';
 import { createBot } from '../src/telegram/client';
 import { registerCallbackHandler } from '../src/telegram/handlers/callback-handler';
 import { registerMessageHandler } from '../src/telegram/handlers/message-handler';
+import { registerRateLimit } from '../src/telegram/handlers/rate-limit';
+import { RateLimiter } from '../src/core/rate-limiter';
 import { BOT_COMMANDS, CALLBACKS, resolveDisplayName } from '../src/telegram/screens/screens';
 
 interface RecordedCall {
@@ -501,5 +503,110 @@ describe('segurança do painel do dono', () => {
     await bot.handleUpdate(callbackUpdate(74, CALLBACKS.MENU_PROFILE, 999));
 
     assert.ok(calls.some((c) => c.method === 'editMessageCaption'), 'o perfil é público');
+  });
+});
+
+
+describe('proteção contra abuso', () => {
+  const OWNER_ID = 8072791511;
+
+  function guardedBot(limit: number, ownerId?: number) {
+    const users = makeStore(ownerId);
+    const limiter = new RateLimiter({ limit, windowMs: 60_000 });
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerRateLimit(bot, { limiter, logger: silentLogger, users });
+    registerStartCommand(bot, {
+      config: { startMediaPath: path.join(dataDir, 'inexistente.mp4') },
+      logger: silentLogger,
+      users,
+      mediaCache: makeCache(),
+    });
+    registerMessageHandler(bot, { logger: silentLogger });
+    return { bot, users };
+  }
+
+  it('bloqueia o excesso de /start e avisa o usuário', async () => {
+    const { bot } = guardedBot(3);
+    const calls = stubTelegram();
+
+    for (let i = 0; i < 3; i += 1) {
+      await bot.handleUpdate(startUpdate(100 + i, { id: 5001, username: 'abusador' }));
+    }
+    const antes = calls.filter((c) => c.method === 'sendMessage').length;
+    assert.equal(antes, 3, 'as três primeiras passam');
+
+    calls.length = 0;
+    await bot.handleUpdate(startUpdate(110, { id: 5001, username: 'abusador' }));
+
+    const respostas = calls.filter((c) => c.method === 'sendMessage');
+    assert.equal(respostas.length, 1, 'a quarta recebe uma resposta');
+    assert.match(String(respostas[0]?.payload.text), /𝐂𝐚𝐥𝐦𝐚/);
+    assert.equal(
+      calls.some((c) => c.method === 'sendAnimation'),
+      false,
+      'não pode fazer o trabalho caro',
+    );
+  });
+
+  it('não infla o contador de acessos quando bloqueado', async () => {
+    const { bot, users } = guardedBot(2);
+    stubTelegram();
+
+    await bot.handleUpdate(startUpdate(120, { id: 5002, username: 'x' }));
+    await bot.handleUpdate(startUpdate(121, { id: 5002, username: 'x' }));
+    const acessosAntes = users.get(5002)?.accessCount ?? 0;
+
+    stubTelegram();
+    await bot.handleUpdate(startUpdate(122, { id: 5002, username: 'x' }));
+
+    assert.equal(users.get(5002)?.accessCount, acessosAntes, 'bloqueado não conta acesso');
+  });
+
+  it('isenta o dono do limite', async () => {
+    const { bot } = guardedBot(1, OWNER_ID);
+    const calls = stubTelegram();
+
+    for (let i = 0; i < 5; i += 1) {
+      await bot.handleUpdate(startUpdate(130 + i, { id: OWNER_ID, username: 'dono' }));
+    }
+
+    const respostas = calls.filter((c) => c.method === 'sendMessage');
+    assert.equal(respostas.length, 5, 'o dono não é barrado');
+    assert.equal(
+      respostas.some((r) => String(r.payload.text).includes('𝐂𝐚𝐥𝐦𝐚')),
+      false,
+    );
+  });
+
+  it('responde callback bloqueado, para não deixar o botão carregando', async () => {
+    const users = makeStore();
+    const limiter = new RateLimiter({ limit: 1, windowMs: 60_000 });
+    const bot = createBot({ token: '111:TESTE', logger: silentLogger });
+    registerRateLimit(bot, { limiter, logger: silentLogger, users });
+    registerCallbackHandler(bot, { logger: silentLogger, users });
+
+    stubTelegram();
+    await bot.handleUpdate(callbackUpdate(140, CALLBACKS.MENU_PROFILE, 6001));
+    const calls = stubTelegram();
+    await bot.handleUpdate(callbackUpdate(141, CALLBACKS.MENU_PROFILE, 6001));
+
+    const answer = calls.find((c) => c.method === 'answerCallbackQuery');
+    assert.ok(answer, 'o callback precisa ser respondido');
+    assert.match(String(answer?.payload.text), /Aguarde/);
+  });
+
+  it('cada usuário tem a própria cota', async () => {
+    const { bot } = guardedBot(1);
+    const calls = stubTelegram();
+
+    await bot.handleUpdate(startUpdate(150, { id: 7001, username: 'a' }));
+    await bot.handleUpdate(startUpdate(151, { id: 7002, username: 'b' }));
+
+    const respostas = calls.filter((c) => c.method === 'sendMessage');
+    assert.equal(respostas.length, 2, 'um não consome a cota do outro');
+    assert.equal(
+      respostas.some((r) => String(r.payload.text).includes('𝐂𝐚𝐥𝐦𝐚')),
+      false,
+    );
   });
 });
